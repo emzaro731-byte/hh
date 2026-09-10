@@ -1,4 +1,4 @@
-name: Android Build
+name: Build GG Messenger APK
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  android:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -20,24 +20,29 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-          cache: gradle
 
-      - name: Set up Node
+      - name: Set up Node 22
         uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: npm
 
-      - name: Install dependencies
-        run: npm ci
+      - name: Install JavaScript dependencies
+        run: npm install
 
-      - name: Verify native project
-        run: test -f android/gradlew
+      - name: Create native Android project when missing
+        run: |
+          if [ ! -f android/gradlew ]; then
+            rm -rf /tmp/gg-native
+            npx @react-native-community/cli@latest init GGMessenger --version 0.81.4 --skip-install --directory /tmp/gg-native
+            cp -R /tmp/gg-native/android ./android
+          fi
+
+      - name: Prepare Supabase environment
+        run: |
+          printf 'SUPABASE_URL=%s\n' "${{ secrets.SUPABASE_URL }}" > .env
+          printf 'SUPABASE_PUBLISHABLE_KEY=%s\n' "${{ secrets.SUPABASE_PUBLISHABLE_KEY }}" >> .env
 
       - name: Build release APK
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
         run: |
           cd android
           chmod +x gradlew
