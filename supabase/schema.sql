@@ -30,9 +30,12 @@ create table if not exists public.messages (
   sender_id uuid not null references auth.users(id) on delete cascade,
   body text not null,
   created_at timestamptz not null default now(),
+  delivered_at timestamptz,
   read_at timestamptz
 );
 
+alter table public.messages add column if not exists delivered_at timestamptz;
+alter table public.messages add column if not exists read_at timestamptz;
 create index if not exists messages_conversation_created_idx on public.messages(conversation_id, created_at);
 create index if not exists conversation_members_user_idx on public.conversation_members(user_id);
 
@@ -44,7 +47,6 @@ alter table public.messages enable row level security;
 create policy "profiles readable by authenticated users" on public.profiles for select to authenticated using (true);
 create policy "users create own profile" on public.profiles for insert to authenticated with check (auth.uid() = id);
 create policy "users update own profile" on public.profiles for update to authenticated using (auth.uid() = id) with check (auth.uid() = id);
-
 create policy "members can read conversations" on public.conversations for select to authenticated using (exists (select 1 from public.conversation_members m where m.conversation_id = id and m.user_id = auth.uid()));
 create policy "authenticated users create conversations" on public.conversations for insert to authenticated with check (true);
 create policy "members can read membership" on public.conversation_members for select to authenticated using (user_id = auth.uid() or exists (select 1 from public.conversation_members m where m.conversation_id = conversation_id and m.user_id = auth.uid()));
