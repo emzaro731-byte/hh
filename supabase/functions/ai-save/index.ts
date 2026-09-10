@@ -8,9 +8,10 @@ serve(async req=>{
   if(req.method==='OPTIONS')return new Response('ok',{headers:cors});
   try{
     const auth=req.headers.get('Authorization');
-    if(!auth)return json({error:'Unauthorized'},401);
-    const userClient=createClient(Deno.env.get('SUPABASE_URL')!,Deno.env.get('SUPABASE_ANON_KEY')!,{global:{headers:{Authorization:auth}}});
-    const {data:{user},error:userError}=await userClient.auth.getUser();
+    const serviceKey=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    if(!auth||!serviceKey)return json({error:'Unauthorized'},401);
+    const service=createClient(Deno.env.get('SUPABASE_URL')!,serviceKey,{global:{headers:{Authorization:auth}}});
+    const {data:{user},error:userError}=await service.auth.getUser();
     if(userError||!user)return json({error:'Unauthorized'},401);
 
     const body=await req.json();
@@ -22,7 +23,6 @@ serve(async req=>{
     const resultText=body.resultText?String(body.resultText):null;
     if(!['chat','image','video','music'].includes(type)||!prompt)return json({error:'Invalid generation'},400);
 
-    const service=createClient(Deno.env.get('SUPABASE_URL')!,Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
     const saved:string[]=[];
     for(const url of urls){
       try{
