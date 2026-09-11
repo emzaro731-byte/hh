@@ -33,9 +33,21 @@ jobs:
         run: |
           if [ ! -f android/gradlew ]; then
             rm -rf /tmp/gg-native
-            npx @react-native-community/cli@latest init GGMessenger --version 0.81.4 --skip-install --directory /tmp/gg-native
+            npx @react-native-community/cli@20.0.2 init GGMessenger --version 0.81.4 --skip-install --directory /tmp/gg-native
             cp -R /tmp/gg-native/android ./android
           fi
+
+      - name: Add WebRTC permissions
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('android/app/src/main/AndroidManifest.xml')
+          text = p.read_text()
+          permissions = '''\n    <uses-permission android:name="android.permission.INTERNET" />\n    <uses-permission android:name="android.permission.CAMERA" />\n    <uses-permission android:name="android.permission.RECORD_AUDIO" />\n    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />\n    <uses-permission android:name="android.permission.BLUETOOTH" />\n    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />\n    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />\n'''
+          if 'android.permission.CAMERA' not in text:
+              text = text.replace('<application', permissions + '    <application', 1)
+              p.write_text(text)
+          PY
 
       - name: Prepare Supabase environment
         run: |
