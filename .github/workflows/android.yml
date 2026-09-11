@@ -40,6 +40,18 @@ jobs:
             cp -R /tmp/gg-native/android ./android
           fi
 
+      - name: Fix Notifee AAR packaging for AGP 8+
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('android/build.gradle')
+          text = p.read_text()
+          marker = '\n// GG Messenger: Notifee ships a local AAR. AGP 8.11 rejects bundling that AAR inside the library project.\n'
+          fix = '''\n// GG Messenger: Notifee ships a local AAR. AGP 8.11 rejects bundling that AAR inside the library project.\nsubprojects { subproject ->\n    subproject.afterEvaluate {\n        if (subproject.name == "notifee_react-native") {\n            subproject.tasks.matching { task ->\n                task.name == "bundleReleaseAar" || task.name == "bundleReleaseLocalLintAar"\n            }.configureEach {\n                enabled = false\n            }\n        }\n    }\n}\n'''
+          if 'GG Messenger: Notifee ships a local AAR' not in text:
+              p.write_text(text + fix)
+          PY
+
       - name: Configure Firebase for Android
         env:
           GOOGLE_SERVICES_JSON: ${{ secrets.FIREBASE_GOOGLE_SERVICES_JSON }}
