@@ -26,11 +26,9 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
+          flutter-version: '3.31.3'
           channel: stable
           cache: true
-
-      - name: Disable native-assets build hook
-        run: flutter config --no-enable-native-assets
 
       - name: Restore Firebase configuration
         env:
@@ -50,10 +48,13 @@ jobs:
         run: flutter pub get
 
       - name: Clean Flutter build state
-        run: flutter clean
+        run: flutter clean && flutter pub get
 
-      - name: Get dependencies after clean
-        run: flutter pub get
+      - name: Verify Flutter package root
+        run: |
+          test -f pubspec.yaml
+          test -f .dart_tool/package_config.json
+          echo "Flutter package root: $(pwd)"
 
       - name: Build release APK
         run: flutter build apk --release --dart-define=SUPABASE_URL="${{ secrets.SUPABASE_URL }}" --dart-define=SUPABASE_ANON_KEY="${{ secrets.SUPABASE_ANON_KEY }}"
