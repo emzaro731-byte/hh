@@ -46,10 +46,28 @@ jobs:
           from pathlib import Path
           p = Path('android/build.gradle')
           text = p.read_text()
-          marker = '\n// GG Messenger: Notifee ships a local AAR. AGP 8.11 rejects bundling that AAR inside the library project.\n'
-          fix = '''\n// GG Messenger: Notifee ships a local AAR. AGP 8.11 rejects bundling that AAR inside the library project.\nsubprojects { subproject ->\n    subproject.afterEvaluate {\n        if (subproject.name == "notifee_react-native") {\n            subproject.tasks.matching { task ->\n                task.name == "bundleReleaseAar" || task.name == "bundleReleaseLocalLintAar"\n            }.configureEach {\n                enabled = false\n            }\n        }\n    }\n}\n'''
-          if 'GG Messenger: Notifee ships a local AAR' not in text:
+          marker = 'GG Messenger: Notifee ships a local AAR'
+          start = text.find('// GG Messenger: Notifee ships a local AAR')
+          if start != -1:
+              text = text[:start].rstrip() + '\n'
+          fix = '''
+// GG Messenger: Notifee ships a local AAR. AGP 8.11 rejects bundling that AAR inside the library project.
+// Use lazy task configuration instead of Project.afterEvaluate, which conflicts with the
+// React Native Gradle settings plugin on Gradle 8.14.3.
+subprojects { subproject ->
+    subproject.tasks.matching { task ->
+        task.name == "bundleReleaseAar" || task.name == "bundleReleaseLocalLintAar"
+    }.configureEach { task ->
+        if (subproject.name == "notifee_react-native") {
+            task.enabled = false
+        }
+    }
+}
+'''
+          if marker not in text:
               p.write_text(text + fix)
+          else:
+              p.write_text(text)
           PY
 
       - name: Configure Firebase for Android
