@@ -50,15 +50,17 @@ jobs:
           rm -rf .dart_tool build
           flutter pub get
 
-      - name: Verify Flutter entrypoint
+      - name: Verify Flutter source
         run: |
           set -e
-          echo "Working directory: $(pwd)"
           test -f pubspec.yaml
           test -f lib/main.dart
-          echo "Found lib/main.dart"
-          head -n 5 lib/main.dart
-          flutter pub deps --style=compact >/dev/null
+          if grep -R -n -F '***' lib --include='*.dart'; then
+            echo "ERROR: Literal *** corruption found in Dart source."
+            exit 1
+          fi
+          echo "Dart source verification passed."
+          flutter analyze --no-fatal-infos
 
       - name: Build release APK
         run: flutter build apk --release --target=lib/main.dart --dart-define=SUPABASE_URL="${{ secrets.SUPABASE_URL }}" --dart-define=SUPABASE_ANON_KEY="${{ secrets.SUPABASE_ANON_KEY }}"
