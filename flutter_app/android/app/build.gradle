@@ -36,5 +36,6 @@ android {
 }
 
 flutter {
-    source ".."
+    // android/app is two levels below the Flutter project root.
+    source "../.."
 }
