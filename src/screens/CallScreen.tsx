@@ -2,54 +2,59 @@ import React,{useEffect,useRef,useState}from'react';
 import{Alert,Pressable,SafeAreaView,StyleSheet,Text,View}from'react-native';
 import{mediaDevices,RTCIceCandidate,RTCPeerConnection,RTCSessionDescription,RTCView}from'react-native-webrtc';
 import{Call,CallRole,CallType,getCall,loadCallSignals,sendCallSignal,setCallStatus,subscribeToCall}from'../lib/calls';
+import{supabase}from'../lib/supabase';
 
 type Props={callId:string;peerName:string;type:CallType;role:CallRole;incoming?:boolean;onClose:()=>void};
 const config={iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'}]};
 
 export default function CallScreen({callId,peerName,type,role,incoming=false,onClose}:Props){
- const pc=useRef<RTCPeerConnection|null>(null);const pendingCandidates=useRef<any[]>([]);const mounted=useRef(true);
- const[local,setLocal]=useState<any>(null),[remote,setRemote]=useState<any>(null),[connected,setConnected]=useState(false),[accepted,setAccepted]=useState(!incoming),[muted,setMuted]=useState(false),[camera,setCamera]=useState(type==='video'),[busy,setBusy]=useState(false);
- useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;pc.current?.close();local?.getTracks?.().forEach((t:any)=>t.stop())}},[]);
- useEffect(()=>{if(accepted)start();},[accepted]);
+ const pc=useRef<RTCPeerConnection|null>(null),channel=useRef<any>(null),pendingCandidates=useRef<any[]>([]);
+ const[local,setLocal]=useState<any>(null),[remote,setRemote]=useState<any>(null),[connected,setConnected]=useState(false),[accepted,setAccepted]=useState(!incoming),[muted,setMuted]=useState(false),[camera,setCamera]=useState(type==='video');
+ useEffect(()=>()=>{if(channel.current)supabase.removeChannel(channel.current);pc.current?.close();local?.getTracks?.().forEach((t:any)=>t.stop())},[local]);
+ useEffect(()=>{if(accepted)void start();},[accepted]);
  async function start(){
   try{
    const stream=await mediaDevices.getUserMedia({audio:true,video:camera?{facingMode:'user'}:false});
-   if(!mounted.current)return;setLocal(stream);
+   setLocal(stream);
    const peer=new RTCPeerConnection(config as any);pc.current=peer;
    stream.getTracks().forEach((track:any)=>peer.addTrack(track,stream));
    peer.ontrack=(event:any)=>{if(event.streams?.[0])setRemote(event.streams[0])};
-   peer.onconnectionstatechange=()=>{const state=peer.connectionState;if(state==='connected')setConnected(true);if(['failed','disconnected','closed'].includes(state)&&mounted.current)end(false)};
-   peer.onicecandidate=(event:any)=>{if(event.candidate)sendCallSignal(callId,'candidate',event.candidate.toJSON?.()??event.candidate).catch(()=>{})};
-   const channel=subscribeToCall(callId,async(next:Call)=>{if(next.status==='ended'||next.status==='rejected')onClose();},async(signal:any)=>{
-    const mine=signal.sender_id;const current=await getCall(callId).catch(()=>null);if(!current||mine===current.caller_id&&role==='caller'||mine===current.callee_id&&role==='callee')return;
+   peer.onconnectionstatechange=()=>{const state=peer.connectionState;if(state==='connected')setConnected(true);if(['failed','closed'].includes(state))onClose()};
+   peer.onicecandidate=(event:any)=>{if(event.candidate)void sendCallSignal(callId,'candidate',event.candidate.toJSON?.()??event.candidate)};
+   channel.current=subscribeToCall(callId,async(next:Call)=>{if(next.status==='ended'||next.status==='rejected')onClose()},async(signal:any)=>{
+    const current=await getCall(callId).catch(()=>null);if(!current)return;
+    if((role==='caller'&&signal.sender_id===current.caller_id)||(role==='callee'&&signal.sender_id===current.callee_id))return;
     try{
       if(signal.kind==='offer'&&role==='callee'){
        await peer.setRemoteDescription(new RTCSessionDescription(signal.payload));
        for(const c of pendingCandidates.current)await peer.addIceCandidate(new RTCIceCandidate(c)).catch(()=>{});pendingCandidates.current=[];
        const answer=await peer.createAnswer();await peer.setLocalDescription(answer);await sendCallSignal(callId,'answer',answer);await setCallStatus(callId,'active');
-      }else if(signal.kind==='answer'&&role==='caller'){await peer.setRemoteDescription(new RTCSessionDescription(signal.payload));
-      }else if(signal.kind==='candidate'){const candidate=new RTCIceCandidate(signal.payload);if(peer.remoteDescription)await peer.addIceCandidate(candidate).catch(()=>{});else pendingCandidates.current.push(signal.payload)}
+      }else if(signal.kind==='answer'&&role==='caller'){
+       await peer.setRemoteDescription(new RTCSessionDescription(signal.payload));
+       for(const c of pendingCandidates.current)await peer.addIceCandidate(new RTCIceCandidate(c)).catch(()=>{});pendingCandidates.current=[];
+      }else if(signal.kind==='candidate'){
+       const candidate=new RTCIceCandidate(signal.payload);if(peer.remoteDescription)await peer.addIceCandidate(candidate).catch(()=>{});else pendingCandidates.current.push(signal.payload);
+      }
     }catch(e){console.warn('call signal',e)}
    });
    const existing=await loadCallSignals(callId);
    if(role==='caller'){
     const offer=await peer.createOffer({});await peer.setLocalDescription(offer);await sendCallSignal(callId,'offer',offer);await setCallStatus(callId,'ringing');
    }else{
-    for(const signal of existing){if(signal.kind==='offer'){await peer.setRemoteDescription(new RTCSessionDescription(signal.payload));const answer=await peer.createAnswer();await peer.setLocalDescription(answer);await sendCallSignal(callId,'answer',answer);await setCallStatus(callId,'active');break}}
+    const offer=existing.find((x:any)=>x.kind==='offer');
+    if(offer){await peer.setRemoteDescription(new RTCSessionDescription(offer.payload));const answer=await peer.createAnswer();await peer.setLocalDescription(answer);await sendCallSignal(callId,'answer',answer);await setCallStatus(callId,'active')}
    }
-   return()=>{channel&&supabaseRemove(channel)};
   }catch(e){Alert.alert('Call failed',e instanceof Error?e.message:'Could not start the call');onClose()}
  }
- function supabaseRemove(channel:any){import('../lib/supabase').then(({supabase})=>supabase.removeChannel(channel)).catch(()=>{})}
- async function end(notify=true){try{if(notify)await setCallStatus(callId,'ended')}catch{}local?.getTracks?.().forEach((t:any)=>t.stop());pc.current?.close();onClose()}
+ async function end(notify=true){if(notify)await setCallStatus(callId,'ended').catch(()=>{});local?.getTracks?.().forEach((t:any)=>t.stop());pc.current?.close();onClose()}
  function toggleMute(){local?.getAudioTracks?.().forEach((t:any)=>t.enabled=!t.enabled);setMuted(v=>!v)}
  function toggleCamera(){local?.getVideoTracks?.().forEach((t:any)=>t.enabled=!t.enabled);setCamera(v=>!v)}
- async function reject(){try{await setCallStatus(callId,'rejected')}catch{}onClose()}
+ async function reject(){await setCallStatus(callId,'rejected').catch(()=>{});onClose()}
  return <SafeAreaView style={s.safe}>
   <View style={s.stage}>{remote&&type==='video'?<RTCView streamURL={remote.toURL()} style={s.remote} objectFit="cover"/>:<View style={s.placeholder}><Text style={s.avatar}>{peerName[0]?.toUpperCase()||'G'}</Text><Text style={s.name}>{peerName}</Text><Text style={s.state}>{incoming&&!accepted?'Incoming ':''}{connected?'Connected':type==='video'?'Video call':'Voice call'}</Text></View>}
    {local&&type==='video'&&<RTCView streamURL={local.toURL()} style={s.local} objectFit="cover"/>}
    <View style={s.top}><Text style={s.peer}>{peerName}</Text><Text style={s.kind}>{type==='video'?'Video':'Voice'}</Text></View>
-   {incoming&&!accepted?<View style={s.incoming}><Pressable style={s.reject} onPress={reject}><Text style={s.btnText}>Decline</Text></Pressable><Pressable style={s.accept} onPress={()=>{setBusy(true);setAccepted(true);setBusy(false)}}><Text style={s.btnText}>{busy?'…':'Accept'}</Text></Pressable></View>:<View style={s.controls}><Pressable style={s.control} onPress={toggleMute}><Text style={s.controlText}>{muted?'🔇':'🎙️'}</Text></Pressable>{type==='video'&&<Pressable style={s.control} onPress={toggleCamera}><Text style={s.controlText}>{camera?'📷':'🚫'}</Text></Pressable>}<Pressable style={s.hangup} onPress={()=>end()}><Text style={s.controlText}>☎</Text></Pressable></View>}
+   {incoming&&!accepted?<View style={s.incoming}><Pressable style={s.reject} onPress={reject}><Text style={s.btnText}>Decline</Text></Pressable><Pressable style={s.accept} onPress={()=>setAccepted(true)}><Text style={s.btnText}>Accept</Text></Pressable></View>:<View style={s.controls}><Pressable style={s.control} onPress={toggleMute}><Text style={s.controlText}>{muted?'🔇':'🎙️'}</Text></Pressable>{type==='video'&&<Pressable style={s.control} onPress={toggleCamera}><Text style={s.controlText}>{camera?'📷':'🚫'}</Text></Pressable>}<Pressable style={s.hangup} onPress={()=>end()}><Text style={s.controlText}>☎</Text></Pressable></View>}
   </View>
  </SafeAreaView>
 }
