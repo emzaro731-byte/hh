@@ -40,36 +40,6 @@ jobs:
             cp -R /tmp/gg-native/android ./android
           fi
 
-      - name: Fix Notifee AAR packaging for AGP 8+
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          p = Path('android/build.gradle')
-          text = p.read_text()
-          marker = 'GG Messenger: Notifee ships a local AAR'
-          start = text.find('// GG Messenger: Notifee ships a local AAR')
-          if start != -1:
-              text = text[:start].rstrip() + '\n'
-          fix = '''
-// GG Messenger: Notifee ships a local AAR. AGP 8.11 rejects bundling that AAR inside the library project.
-// Use lazy task configuration instead of Project.afterEvaluate, which conflicts with the
-// React Native Gradle settings plugin on Gradle 8.14.3.
-subprojects { subproject ->
-    subproject.tasks.matching { task ->
-        task.name == "bundleReleaseAar" || task.name == "bundleReleaseLocalLintAar"
-    }.configureEach { task ->
-        if (subproject.name == "notifee_react-native") {
-            task.enabled = false
-        }
-    }
-}
-'''
-          if marker not in text:
-              p.write_text(text + fix)
-          else:
-              p.write_text(text)
-          PY
-
       - name: Configure Firebase for Android
         env:
           GOOGLE_SERVICES_JSON: ${{ secrets.FIREBASE_GOOGLE_SERVICES_JSON }}
@@ -123,7 +93,7 @@ subprojects { subproject ->
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleRelease --no-daemon
+          ./gradlew assembleRelease --no-daemon -x :notifee_react-native:bundleReleaseAar -x :notifee_react-native:bundleReleaseLocalLintAar
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
