@@ -29,24 +29,25 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Restore google-services.json
+      - name: Restore Firebase configuration
         env:
           GOOGLE_SERVICES_JSON: ${{ secrets.FIREBASE_GOOGLE_SERVICES_JSON }}
         run: |
+          set -e
           if [ -z "$GOOGLE_SERVICES_JSON" ]; then
             echo "FIREBASE_GOOGLE_SERVICES_JSON secret is not configured."
             exit 1
           fi
           printf '%s' "$GOOGLE_SERVICES_JSON" > android/app/google-services.json
+          PACKAGE=$(python3 -c 'import json; print(json.load(open("android/app/google-services.json"))["client"][0]["client_info"]["android_client_info"]["package_name"])')
+          echo "FIREBASE_ANDROID_PACKAGE=$PACKAGE" >> "$GITHUB_ENV"
+          echo "Firebase Android package detected: $PACKAGE"
 
       - name: Get dependencies
         run: flutter pub get
 
-      - name: Build APK
-        run: flutter build apk --release
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+      - name: Build release APK
+        run: flutter build apk --release --dart-define=SUPABASE_URL="${{ secrets.SUPABASE_URL }}" --dart-define=SUPABASE_ANON_KEY="${{ secrets.SUPABASE_ANON_KEY }}"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
