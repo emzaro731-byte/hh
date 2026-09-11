@@ -37,16 +37,18 @@ jobs:
             cp -R /tmp/gg-native/android ./android
           fi
 
-      - name: Add WebRTC permissions
+      - name: Add WebRTC and call notification permissions
         run: |
           python - <<'PY'
           from pathlib import Path
           p = Path('android/app/src/main/AndroidManifest.xml')
           text = p.read_text()
-          permissions = '''\n    <uses-permission android:name="android.permission.INTERNET" />\n    <uses-permission android:name="android.permission.CAMERA" />\n    <uses-permission android:name="android.permission.RECORD_AUDIO" />\n    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />\n    <uses-permission android:name="android.permission.BLUETOOTH" />\n    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />\n    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />\n'''
+          permissions = '''\n    <uses-permission android:name="android.permission.INTERNET" />\n    <uses-permission android:name="android.permission.CAMERA" />\n    <uses-permission android:name="android.permission.RECORD_AUDIO" />\n    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />\n    <uses-permission android:name="android.permission.BLUETOOTH" />\n    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />\n    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />\n    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />\n    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />\n'''
           if 'android.permission.CAMERA' not in text:
               text = text.replace('<application', permissions + '    <application', 1)
-              p.write_text(text)
+          if 'android:showWhenLocked="true"' not in text:
+              text = text.replace('<activity android:name=".MainActivity"', '<activity android:name=".MainActivity" android:showWhenLocked="true" android:turnScreenOn="true"', 1)
+          p.write_text(text)
           PY
 
       - name: Prepare Supabase environment
