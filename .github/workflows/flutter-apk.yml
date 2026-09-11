@@ -29,6 +29,9 @@ jobs:
           channel: stable
           cache: true
 
+      - name: Disable native-assets build hook
+        run: flutter config --no-enable-native-assets
+
       - name: Restore Firebase configuration
         env:
           GOOGLE_SERVICES_JSON: ${{ secrets.FIREBASE_GOOGLE_SERVICES_JSON }}
@@ -44,6 +47,12 @@ jobs:
           echo "Firebase Android package detected: $PACKAGE"
 
       - name: Get dependencies
+        run: flutter pub get
+
+      - name: Clean Flutter build state
+        run: flutter clean
+
+      - name: Get dependencies after clean
         run: flutter pub get
 
       - name: Build release APK
