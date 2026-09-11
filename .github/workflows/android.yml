@@ -93,7 +93,7 @@ jobs:
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleRelease --no-daemon -x :notifee_react-native:bundleReleaseAar -x :notifee_react-native:bundleReleaseLocalLintAar
+          ./gradlew assembleRelease --no-daemon -x :notifee_react-native:bundleReleaseAar
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
