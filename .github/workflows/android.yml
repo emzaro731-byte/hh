@@ -5,6 +5,9 @@ on:
     branches: [main]
   workflow_dispatch:
 
+env:
+  FIREBASE_GOOGLE_SERVICES_JSON: ${{ secrets.FIREBASE_GOOGLE_SERVICES_JSON }}
+
 jobs:
   android:
     runs-on: ubuntu-latest
@@ -36,6 +39,31 @@ jobs:
             npx @react-native-community/cli@20.0.2 init GGMessenger --version 0.81.4 --skip-install --directory /tmp/gg-native
             cp -R /tmp/gg-native/android ./android
           fi
+
+      - name: Configure Firebase for Android
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.FIREBASE_GOOGLE_SERVICES_JSON }}
+        run: |
+          set -e
+          if [ -z "$GOOGLE_SERVICES_JSON" ]; then
+            echo "Missing GitHub secret FIREBASE_GOOGLE_SERVICES_JSON"
+            echo "Add the Firebase Android google-services.json contents as this repository secret."
+            exit 1
+          fi
+          printf '%s' "$GOOGLE_SERVICES_JSON" > android/app/google-services.json
+          python - <<'PY'
+          from pathlib import Path
+          root = Path('android/build.gradle')
+          app = Path('android/app/build.gradle')
+          root_text = root.read_text()
+          if 'com.google.gms:google-services' not in root_text:
+              root_text = 'buildscript {\n    repositories {\n        google()\n        mavenCentral()\n    }\n    dependencies {\n        classpath("com.google.gms:google-services:4.4.4")\n    }\n}\n\n' + root_text
+              root.write_text(root_text)
+          app_text = app.read_text()
+          if 'com.google.gms.google-services' not in app_text:
+              app_text += '\napply plugin: "com.google.gms.google-services"\n'
+              app.write_text(app_text)
+          PY
 
       - name: Add WebRTC and call notification permissions
         run: |
