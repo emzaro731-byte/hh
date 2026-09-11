@@ -2,7 +2,6 @@ import {supabase} from './supabase';
 
 export type CallType='audio'|'video';
 export type CallRole='caller'|'callee';
-
 export type Call={id:string;caller_id:string;callee_id:string;type:CallType;status:'ringing'|'active'|'ended'|'rejected';created_at:string;ended_at?:string|null};
 
 export async function createCall(calleeId:string,type:CallType){
@@ -10,7 +9,10 @@ export async function createCall(calleeId:string,type:CallType){
   if(!user)throw new Error('You must be signed in');
   const {data,error}=await supabase.from('calls').insert({caller_id:user.id,callee_id:calleeId,type,status:'ringing'}).select().single();
   if(error)throw error;
-  return data as Call;
+  const call=data as Call;
+  const push=await supabase.functions.invoke('send-call-push',{body:{callId:call.id}});
+  if(push.error)console.warn('Incoming call push failed',push.error);
+  return call;
 }
 
 export async function getCall(callId:string){
