@@ -44,20 +44,24 @@ jobs:
           echo "FIREBASE_ANDROID_PACKAGE=$PACKAGE" >> "$GITHUB_ENV"
           echo "Firebase Android package detected: $PACKAGE"
 
-      - name: Get dependencies
-        run: flutter pub get
-
-      - name: Clean Flutter build state
-        run: flutter clean && flutter pub get
-
-      - name: Verify Flutter package root
+      - name: Reset Flutter generated state
         run: |
+          set -e
+          rm -rf .dart_tool build
+          flutter pub get
+
+      - name: Verify Flutter entrypoint
+        run: |
+          set -e
+          echo "Working directory: $(pwd)"
           test -f pubspec.yaml
-          test -f .dart_tool/package_config.json
-          echo "Flutter package root: $(pwd)"
+          test -f lib/main.dart
+          echo "Found lib/main.dart"
+          head -n 5 lib/main.dart
+          flutter pub deps --style=compact >/dev/null
 
       - name: Build release APK
-        run: flutter build apk --release --dart-define=SUPABASE_URL="${{ secrets.SUPABASE_URL }}" --dart-define=SUPABASE_ANON_KEY="${{ secrets.SUPABASE_ANON_KEY }}"
+        run: flutter build apk --release --target=lib/main.dart --dart-define=SUPABASE_URL="${{ secrets.SUPABASE_URL }}" --dart-define=SUPABASE_ANON_KEY="${{ secrets.SUPABASE_ANON_KEY }}"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
