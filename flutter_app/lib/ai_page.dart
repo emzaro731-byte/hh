@@ -40,7 +40,6 @@ class _AIPageState extends State<AIPage> {
   List<String> urlsFrom(dynamic value){if(value==null)return[];if(value is List)return value.where((x)=>x!=null&&x.toString().isNotEmpty).map((x)=>x.toString()).toList();if(value is String&&value.isNotEmpty)return[value];return[];}
   List<String> urls(Map<String,dynamic>? r){if(r==null)return[];final a=urlsFrom(r['urls']);if(a.isNotEmpty)return a;final b=urlsFrom(r['result_urls']);if(b.isNotEmpty)return b;return urlsFrom(r['url']);}
   String extFor(String type,String url){final clean=url.split('?').first.toLowerCase();final dot=clean.lastIndexOf('.');if(dot>0&&dot<clean.length-1){final e=clean.substring(dot+1);if(e.length<=5)return e;}return type=='image'?'jpg':type=='video'?'mp4':type=='music'?'mp3':'bin';}
-  String mimeFor(String ext,String type){if(type=='image')return ext=='jpg'||ext=='jpeg'?'image/jpeg':'image/$ext';if(type=='video')return 'video/$ext';if(type=='music')return ext=='wav'?'audio/wav':'audio/mpeg';return 'application/octet-stream';}
   Future<void> open(String u)async{await launchUrl(Uri.parse(u),mode:LaunchMode.externalApplication);}
   Future<void> download(String url,String type,{String? name}) async {
     if(downloading)return;setState(()=>downloading=true);
@@ -49,7 +48,7 @@ class _AIPageState extends State<AIPage> {
       if(response.statusCode<200||response.statusCode>=300)throw Exception('Server returned ${response.statusCode}');
       final builder=BytesBuilder();await for(final chunk in response)builder.add(chunk);client.close();
       final ext=extFor(type,url);final safe=(name??'gg_${type}_${DateTime.now().millisecondsSinceEpoch}').replaceAll(RegExp(r'[^a-zA-Z0-9_-]'),'_');
-      final saved=await FilePicker.platform.saveFile(dialogTitle:'Save ${title(type)}',fileName:'$safe.$ext',bytes:Uint8List.fromList(builder.takeBytes()),mimeType:mimeFor(ext,type));
+      final saved=await FilePicker.platform.saveFile(dialogTitle:'Save ${title(type)}',fileName:'$safe.$ext',bytes:Uint8List.fromList(builder.takeBytes()));
       if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(saved==null?'Download cancelled':'${title(type)} saved successfully')));
     }catch(e){if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text('Download failed: $e')));}finally{if(mounted)setState(()=>downloading=false);}
   }
