@@ -195,21 +195,18 @@ class _HomePageState extends State<HomePage> {
                 ? const Center(child: CircularProgressIndicator())
                 : list.isEmpty
                     ? Center(child: Column(mainAxisSize: MainAxisSize.min, children: [const Icon(Icons.chat_bubble_outline, size: 54), const SizedBox(height: 12), const Text('No conversations yet', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)), FilledButton(onPressed: newChat, child: const Text('New conversation'))]))
-                    : RefreshIndicator(
-                        onRefresh: refresh,
-                        child: ListView.builder(
-                          itemCount: list.length,
-                          itemBuilder: (_, i) {
-                            final x = list[i];
-                            return ListTile(
-                              leading: CircleAvatar(child: Text(x.name.isEmpty ? 'G' : x.name[0].toUpperCase())),
-                              title: Text(x.name, style: const TextStyle(fontWeight: FontWeight.w700)),
-                              subtitle: Text(x.message, maxLines: 1, overflow: TextOverflow.ellipsis),
-                              trailing: Text(x.time, style: const TextStyle(fontSize: 11)),
-                              onTap: () => Navigator.push(c, MaterialPageRoute(builder: (_) => ChatPage(conversation: x, dark: dark))).then((_) => refresh()),
-                            );
-                          },
-                        ),
+                    : ListView.builder(
+                        itemCount: list.length,
+                        itemBuilder: (_, i) {
+                          final x = list[i];
+                          return ListTile(
+                            leading: CircleAvatar(child: Text(x.name.isEmpty ? 'G' : x.name[0].toUpperCase())),
+                            title: Text(x.name, style: const TextStyle(fontWeight: FontWeight.w700)),
+                            subtitle: Text(x.message, maxLines: 1, overflow: TextOverflow.ellipsis),
+                            trailing: Text(x.time, style: const TextStyle(fontSize: 11)),
+                            onTap: () => Navigator.push(c, MaterialPageRoute(builder: (_) => ChatPage(conversation: x, dark: dark))).then((_) => refresh()),
+                          );
+                        },
                       ),
           ),
         ]),
