@@ -1,0 +1,39 @@
+import React,{useEffect,useMemo,useState}from'react';
+import{FlatList,Modal,Pressable,SafeAreaView,StatusBar,StyleSheet,Text,TextInput,View}from'react-native';
+import{loadConversations,Conversation}from'./lib/conversations';
+import MessengerHome from'./MessengerHome';
+
+export default function WhatsAppHome(){
+ const[tab,setTab]=useState<'Chats'|'Updates'|'Communities'|'Calls'>('Chats');
+ const[query,setQuery]=useState(''); const[chats,setChats]=useState<Conversation[]>([]);
+ const[loading,setLoading]=useState(true); const[showMessenger,setShowMessenger]=useState(false);
+ const[menu,setMenu]=useState(false); const[search,setSearch]=useState(false); const[unread]=useState(21);
+ const refresh=async()=>{setLoading(true);try{setChats(await loadConversations())}catch{}finally{setLoading(false)}};
+ useEffect(()=>{refresh()},[]);
+ const filtered=useMemo(()=>chats.filter(c=>c.name.toLowerCase().includes(query.toLowerCase())),[chats,query]);
+ const openChats=()=>{setTab('Chats');setShowMessenger(true)};
+ if(showMessenger)return <MessengerHome/>;
+ return <SafeAreaView style={s.safe}>
+  <StatusBar barStyle="light-content" backgroundColor="#0b1115"/>
+  <View style={s.header}><Text style={s.title}>GG</Text><View style={s.headerActions}>
+   <Pressable onPress={()=>setSearch(v=>!v)} hitSlop={12}><Text style={s.icon}>⌕</Text></Pressable>
+   <Pressable onPress={()=>setMenu(true)} hitSlop={12}><Text style={s.icon}>⋮</Text></Pressable>
+  </View></View>
+  {search&&<View style={s.searchBar}><Text style={s.searchIcon}>⌕</Text><TextInput autoFocus value={query} onChangeText={setQuery} placeholder="Search conversations" placeholderTextColor="#8b949e" style={s.searchInput}/></View>}
+  <View style={s.filters}>
+   <Pressable style={[s.filter,tab==='Chats'&&s.filterActive]} onPress={()=>setTab('Chats')}><Text style={[s.filterText,tab==='Chats'&&s.filterActiveText]}>All</Text></Pressable>
+   <Pressable style={s.filter} onPress={()=>setTab('Chats')}><Text style={s.filterText}>Unread {unread}</Text></Pressable>
+   <Pressable style={s.filter} onPress={()=>setTab('Chats')}><Text style={s.filterText}>Favourites</Text></Pressable>
+   <Pressable style={s.filter} onPress={()=>setTab('Chats')}><Text style={s.filterText}>Groups</Text></Pressable>
+  </View>
+  <FlatList data={filtered} keyExtractor={x=>x.id} refreshing={loading} onRefresh={refresh} contentContainerStyle={s.list}
+   ListHeaderComponent={<><Pressable style={s.locked} onPress={()=>setMenu(true)}><Text style={s.lockIcon}>▣</Text><Text style={s.lockText}>Locked chats</Text></Pressable>{tab==='Chats'&&<Text style={s.section}>RECENT</Text>}</>}
+   ListEmptyComponent={<View style={s.empty}><Text style={s.emptyIcon}>{tab==='Chats'?'💬':'○'}</Text><Text style={s.emptyTitle}>{loading?'Loading…':tab==='Chats'?'No chats yet':tab}</Text><Text style={s.emptyText}>{tab==='Chats'?'Start a new conversation to see it here.':'This section is ready for your next update.'}</Text></View>}
+   renderItem={({item})=><Pressable style={s.chatRow} onPress={openChats}><View style={s.avatar}><Text style={s.avatarText}>{item.name.slice(0,1).toUpperCase()}</Text></View><View style={s.chatMain}><View style={s.chatTop}><Text numberOfLines={1} style={s.chatName}>{item.name}</Text><Text style={s.time}>{item.time||''}</Text></View><Text numberOfLines={1} style={s.preview}>{item.message||'No messages yet'}</Text></View></Pressable>}/>
+  />
+  <Pressable style={s.fab} onPress={openChats}><Text style={s.fabText}>＋</Text></Pressable>
+  <View style={s.bottom}>{([['Chats','▤'],['Updates','◉'],['Communities','♧'],['Calls','⌕']] as const).map(([name,icon])=><Pressable key={name} style={s.bottomItem} onPress={()=>setTab(name)}><Text style={[s.bottomIcon,tab===name&&s.bottomActive]}>{icon}</Text><Text style={[s.bottomText,tab===name&&s.bottomActive]}>{name}</Text>{name==='Chats'&&unread>0&&<View style={s.badge}><Text style={s.badgeText}>{unread}</Text></View>}</Pressable>)}</View>
+  <Modal transparent visible={menu} animationType="fade" onRequestClose={()=>setMenu(false)}><Pressable style={s.modal} onPress={()=>setMenu(false)}><View style={s.menu}><Text style={s.menuTitle}>GG Messenger</Text><Pressable style={s.menuItem} onPress={()=>{setMenu(false);openChats()}}><Text style={s.menuText}>New chat</Text></Pressable><Pressable style={s.menuItem} onPress={()=>setMenu(false)}><Text style={s.menuText}>Settings</Text></Pressable></View></Pressable></Modal>
+ </SafeAreaView>
+}
+const s=StyleSheet.create({safe:{flex:1,backgroundColor:'#0b1115'},header:{height:82,paddingHorizontal:22,flexDirection:'row',alignItems:'center',justifyContent:'space-between'},title:{color:'#f1f5f7',fontSize:30,fontWeight:'800'},headerActions:{flexDirection:'row',gap:24},icon:{color:'#f1f5f7',fontSize:30},searchBar:{marginHorizontal:18,marginBottom:10,height:52,borderRadius:28,backgroundColor:'#232a2f',flexDirection:'row',alignItems:'center',paddingHorizontal:16},searchIcon:{color:'#9aa4aa',fontSize:25},searchInput:{flex:1,color:'#f1f5f7',fontSize:16,marginLeft:8},filters:{flexDirection:'row',paddingHorizontal:16,paddingBottom:18,gap:10},filter:{borderRadius:22,borderWidth:1,borderColor:'#2d363b',paddingHorizontal:17,paddingVertical:9},filterActive:{backgroundColor:'#063f2b',borderColor:'#0a6b49'},filterText:{color:'#aeb7bc',fontSize:14,fontWeight:'700'},filterActiveText:{color:'#b7f2d3'},list:{paddingBottom:105},locked:{height:72,marginHorizontal:18,flexDirection:'row',alignItems:'center',gap:18},lockIcon:{color:'#8f999e',fontSize:28},lockText:{color:'#9ca5aa',fontSize:17,fontWeight:'700'},section:{color:'#7f8a90',fontSize:12,fontWeight:'800',letterSpacing:1,paddingHorizontal:22,paddingVertical:9},chatRow:{height:78,paddingHorizontal:18,flexDirection:'row',alignItems:'center'},avatar:{width:58,height:58,borderRadius:29,backgroundColor:'#123b4a',alignItems:'center',justifyContent:'center',marginRight:15},avatarText:{color:'#65c7e7',fontSize:21,fontWeight:'800'},chatMain:{flex:1,height:72,justifyContent:'center'},chatTop:{flexDirection:'row',justifyContent:'space-between',alignItems:'center'},chatName:{color:'#eef2f4',fontSize:17,fontWeight:'700',flex:1,marginRight:8},time:{color:'#7f8a90',fontSize:12},preview:{color:'#8f999e',fontSize:14,marginTop:5},empty:{alignItems:'center',paddingTop:70,paddingHorizontal:35},emptyIcon:{fontSize:44},emptyTitle:{color:'#eef2f4',fontSize:19,fontWeight:'700',marginTop:12},emptyText:{color:'#7f8a90',textAlign:'center',marginTop:7},fab:{position:'absolute',right:18,bottom:78,width:58,height:58,borderRadius:18,backgroundColor:'#19c36a',alignItems:'center',justifyContent:'center',elevation:7},fabText:{color:'#06150d',fontSize:31},bottom:{height:78,position:'absolute',left:0,right:0,bottom:0,backgroundColor:'#10171b',borderTopWidth:1,borderTopColor:'#1e272c',flexDirection:'row',justifyContent:'space-around',paddingTop:8},bottomItem:{alignItems:'center',width:'25%',position:'relative'},bottomIcon:{color:'#d2d8db',fontSize:25,height:30},bottomActive:{color:'#35d27a'},bottomText:{color:'#c1c8cc',fontSize:12,fontWeight:'700',marginTop:3},badge:{position:'absolute',top:-2,right:22,minWidth:20,height:20,borderRadius:10,backgroundColor:'#25d366',alignItems:'center',justifyContent:'center',paddingHorizontal:5},badgeText:{color:'#06150d',fontSize:11,fontWeight:'900'},modal:{flex:1,backgroundColor:'rgba(0,0,0,.35)',alignItems:'flex-end',paddingTop:60,paddingRight:15},menu:{width:180,backgroundColor:'#20272b',borderRadius:12,paddingVertical:8,elevation:8},menuTitle:{color:'#fff',fontSize:16,fontWeight:'800',padding:14,paddingBottom:8},menuItem:{paddingHorizontal:14,paddingVertical:13},menuText:{color:'#e8edef',fontSize:15}});
