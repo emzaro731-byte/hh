@@ -13,6 +13,17 @@ async function kie(path:string,body?:any,method='POST'){
   return d;
 }
 
+async function groqModels(){
+  const key=Deno.env.get('GROQ_API_KEY');
+  if(!key)return [];
+  try{
+    const r=await fetch('https://api.groq.com/openai/v1/models',{headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json'}});
+    if(!r.ok)return [];
+    const d=await r.json();
+    return (d.data||[]).filter((x:any)=>x.id&&!x.id.includes('whisper')).map((x:any)=>({id:x.id,name:x.id,speed:x.id.includes('20b')?'Ultra Fast':x.id.includes('120b')?'Expert':'Fast',provider:'Groq'}));
+  }catch{return []}
+}
+
 function normalizeStatus(type:string,d:any){
   const data=d?.data||{};
   if(type==='video')return {status:data.state||'pending',url:data.videoInfo?.videoUrl,urls:data.videoInfo?.videoUrl?[data.videoInfo.videoUrl]:[],raw:d};
@@ -26,44 +37,45 @@ function normalizeStatus(type:string,d:any){
   return {status:data.state||'pending',url:urls[0],urls,raw:d};
 }
 
-// KIE model catalog exposed to the app. KIE continually adds models, so the UI
-// can offer these stable model IDs while the backend keeps provider secrets private.
 const MODELS={
   image:[
-    {id:'seedream/5.0-lite',name:'Seedream 5.0 Lite',speed:'Fast'},
-    {id:'seedream/5.0-pro',name:'Seedream 5.0 Pro',speed:'Quality'},
-    {id:'google/imagen4-fast',name:'Google Imagen 4 Fast',speed:'Fast'},
-    {id:'google/imagen4',name:'Google Imagen 4',speed:'Quality'},
-    {id:'google/nano-banana-2',name:'Nano Banana 2',speed:'Fast'},
-    {id:'google/nano-banana-pro',name:'Nano Banana Pro',speed:'Quality'},
-    {id:'flux-2/flex-text-to-image',name:'Flux 2 Flex',speed:'Fast'},
-    {id:'flux-2/pro-text-to-image',name:'Flux 2 Pro',speed:'Quality'},
-    {id:'grok-imagine/text-to-image',name:'Grok Imagine',speed:'Fast'},
-    {id:'gpt-image-2',name:'GPT Image 2',speed:'Quality'},
-    {id:'z-image',name:'Z-image',speed:'Fast'},
+    {id:'seedream/5.0-lite',name:'Seedream 5.0 Lite',speed:'Fast',provider:'KIE'},
+    {id:'seedream/5.0-pro',name:'Seedream 5.0 Pro',speed:'Expert',provider:'KIE'},
+    {id:'google/imagen4-fast',name:'Google Imagen 4 Fast',speed:'Fast',provider:'KIE'},
+    {id:'google/imagen4-ultra',name:'Google Imagen 4 Ultra',speed:'Expert',provider:'KIE'},
+    {id:'google/imagen4',name:'Google Imagen 4',speed:'Quality',provider:'KIE'},
+    {id:'google/nano-banana-2',name:'Nano Banana 2',speed:'Fast',provider:'KIE'},
+    {id:'google/nano-banana-2-lite',name:'Nano Banana 2 Lite',speed:'Ultra Fast',provider:'KIE'},
+    {id:'google/nano-banana-pro',name:'Nano Banana Pro',speed:'Expert',provider:'KIE'},
+    {id:'flux-2/flex-text-to-image',name:'Flux 2 Flex',speed:'Fast',provider:'KIE'},
+    {id:'flux-2/pro-text-to-image',name:'Flux 2 Pro',speed:'Quality',provider:'KIE'},
+    {id:'grok-imagine/text-to-image',name:'Grok Imagine',speed:'Fast',provider:'KIE'},
+    {id:'gpt-image-2',name:'GPT Image 2',speed:'Quality',provider:'KIE'},
+    {id:'z-image',name:'Z-image',speed:'Fast',provider:'KIE'},
   ],
   video:[
-    {id:'kling-3.0',name:'Kling 3.0',speed:'Quality'},
-    {id:'kling/v3-turbo-text-to-video',name:'Kling V3 Turbo',speed:'Fast'},
-    {id:'kling-2.6/text-to-video',name:'Kling 2.6',speed:'Fast'},
-    {id:'veo3/veo-3.1-fast',name:'Veo 3.1 Fast',speed:'Fast'},
-    {id:'veo3/veo-3.1-quality',name:'Veo 3.1 Quality',speed:'Quality'},
-    {id:'pixverse/v6-text-to-video',name:'PixVerse V6',speed:'Fast'},
-    {id:'wan/2.7-text-to-video',name:'Wan 2.7',speed:'Fast'},
-    {id:'runway',name:'Runway',speed:'Quality'},
-    {id:'grok-imagine/text-to-video',name:'Grok Imagine Video',speed:'Fast'},
-    {id:'seedance/2.0',name:'Seedance 2.0',speed:'Fast'},
+    {id:'kling-3.0',name:'Kling 3.0',speed:'Expert',provider:'KIE'},
+    {id:'kling/v3-turbo-text-to-video',name:'Kling V3 Turbo',speed:'Ultra Fast',provider:'KIE'},
+    {id:'kling-2.6/text-to-video',name:'Kling 2.6',speed:'Fast',provider:'KIE'},
+    {id:'veo3/veo-3.1-fast',name:'Veo 3.1 Fast',speed:'Fast',provider:'KIE'},
+    {id:'veo3/veo-3.1-quality',name:'Veo 3.1 Quality',speed:'Expert',provider:'KIE'},
+    {id:'pixverse/v6-text-to-video',name:'PixVerse V6',speed:'Fast',provider:'KIE'},
+    {id:'wan/2.7-text-to-video',name:'Wan 2.7',speed:'Fast',provider:'KIE'},
+    {id:'runway',name:'Runway',speed:'Quality',provider:'KIE'},
+    {id:'grok-imagine/text-to-video',name:'Grok Imagine Video',speed:'Fast',provider:'KIE'},
+    {id:'seedance/2.0',name:'Seedance 2.0',speed:'Fast',provider:'KIE'},
+    {id:'gemini-omni-video',name:'Gemini Omni Video',speed:'Expert',provider:'KIE'},
   ],
   music:[
-    {id:'V6',name:'Suno V6',speed:'Quality'},
-    {id:'V6_MINI',name:'Suno V6 Mini',speed:'Fast'},
-    {id:'V6_WILD',name:'Suno V6 Wild',speed:'Creative'},
-    {id:'V5_5',name:'Suno V5.5',speed:'Quality'},
-    {id:'V5',name:'Suno V5',speed:'Fast'},
-    {id:'V4_5ALL',name:'Suno V4.5 All',speed:'Fast'},
-    {id:'V4_5PLUS',name:'Suno V4.5 Plus',speed:'Quality'},
-    {id:'V4_5',name:'Suno V4.5',speed:'Fast'},
-    {id:'V4',name:'Suno V4',speed:'Classic'},
+    {id:'V6',name:'Suno V6',speed:'Expert',provider:'KIE'},
+    {id:'V6_MINI',name:'Suno V6 Mini',speed:'Fast',provider:'KIE'},
+    {id:'V6_WILD',name:'Suno V6 Wild',speed:'Creative',provider:'KIE'},
+    {id:'V5_5',name:'Suno V5.5',speed:'Quality',provider:'KIE'},
+    {id:'V5',name:'Suno V5',speed:'Fast',provider:'KIE'},
+    {id:'V4_5ALL',name:'Suno V4.5 All',speed:'Fast',provider:'KIE'},
+    {id:'V4_5PLUS',name:'Suno V4.5 Plus',speed:'Quality',provider:'KIE'},
+    {id:'V4_5',name:'Suno V4.5',speed:'Fast',provider:'KIE'},
+    {id:'V4',name:'Suno V4',speed:'Classic',provider:'KIE'},
   ]
 };
 
@@ -72,7 +84,7 @@ serve(async req=>{
   try{
     const body=await req.json();
     const {type,prompt,options={},action='generate',taskId}=body;
-    if(action==='models')return json({models:MODELS});
+    if(action==='models')return json({models:MODELS,chat:await groqModels()});
     const auth=req.headers.get('Authorization');
     const serviceKey=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
     const service=serviceKey?createClient(Deno.env.get('SUPABASE_URL')!,serviceKey,{global:{headers:auth?{Authorization:auth}:{}}}):null;
