@@ -50,11 +50,25 @@ jobs:
           rm -rf .dart_tool build
           flutter pub get
 
+      - name: Generate GG launcher icons
+        run: |
+          set -e
+          sudo apt-get update
+          sudo apt-get install -y librsvg2-bin
+          for spec in "mdpi 48" "hdpi 72" "xhdpi 96" "xxhdpi 144" "xxxhdpi 192"; do
+            density=$(echo "$spec" | cut -d' ' -f1)
+            size=$(echo "$spec" | cut -d' ' -f2)
+            mkdir -p "android/app/src/main/res/mipmap-$density"
+            rsvg-convert -w "$size" -h "$size" assets/gg_messenger_logo.svg -o "android/app/src/main/res/mipmap-$density/ic_launcher.png"
+          done
+          echo "GG launcher icons generated from assets/gg_messenger_logo.svg"
+
       - name: Verify Flutter source
         run: |
           set -e
           test -f pubspec.yaml
           test -f lib/main.dart
+          test -f assets/gg_messenger_logo.svg
           if grep -R -n -F '***' lib --include='*.dart'; then
             echo "ERROR: Literal *** corruption found in Dart source."
             exit 1
