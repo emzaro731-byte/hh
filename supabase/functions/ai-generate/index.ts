@@ -1,4 +1,5 @@
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const cors={'Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'authorization, x-client-info, apikey, content-type'};
 const json=(x:any,status=200)=>new Response(JSON.stringify(x),{status,headers:{...cors,'Content-Type':'application/json'}});
@@ -10,6 +11,12 @@ async function kie(path:string,body?:any,method='POST'){
   const d=await r.json();
   if(!r.ok||d.code&&d.code!==200)throw new Error(d.msg||`KIE request failed (${r.status})`);
   return d;
+}
+
+async function recordPending(type:string,prompt:string,model:string|null,taskId:string){
+  try{
+    const auth=undefined;
+  }catch(_){ }
 }
 
 function normalizeStatus(type:string,d:any){
@@ -30,6 +37,11 @@ serve(async req=>{
   try{
     const body=await req.json();
     const {type,prompt,options={},action='generate',taskId}=body;
+    const auth=req.headers.get('Authorization');
+    const serviceKey=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    const service=serviceKey?createClient(Deno.env.get('SUPABASE_URL')!,serviceKey,{global:{headers:auth?{Authorization:auth}:{}}}):null;
+    let userId:string|null=null;
+    if(service&&auth){const {data:{user}}=await service.auth.getUser();userId=user?.id||null;}
 
     if(action==='status'){
       if(!taskId)return json({error:'taskId is required'},400);
@@ -41,17 +53,25 @@ serve(async req=>{
     }
 
     if(!prompt?.trim())return json({error:'Prompt is required'},400);
+    const callbackUrl=`${Deno.env.get('SUPABASE_URL')}/functions/v1/ai-callback`;
+
     if(type==='image'){
-      const d=await kie('/api/v1/jobs/createTask',{model:options.model||'flux-2/flex-text-to-image',input:{prompt,aspect_ratio:options.aspectRatio||'1:1',resolution:'1K',nsfw_checker:false}});
-      return json({taskId:d.data?.taskId,status:'pending',raw:d});
+      const d=await kie('/api/v1/jobs/createTask',{model:options.model||'flux-2/flex-text-to-image',callBackUrl:callbackUrl,input:{prompt,aspect_ratio:options.aspectRatio||'1:1',resolution:'1K',nsfw_checker:false}});
+      const id=d.data?.taskId;
+      if(service&&userId&&id)await service.from('ai_generations').insert({user_id:userId,type:'image',prompt,model:options.model||'flux-2/flex-text-to-image',task_id:id,status:'pending'});
+      return json({taskId:id,status:'pending',raw:d});
     }
     if(type==='video'){
-      const d=await kie('/api/v1/runway/generate',{prompt,duration:options.duration||5,quality:options.quality||'720p',aspectRatio:options.aspectRatio||'9:16',waterMark:''});
-      return json({taskId:d.data?.taskId,status:'wait',raw:d});
+      const d=await kie('/api/v1/runway/generate',{prompt,duration:options.duration||5,quality:options.quality||'720p',aspectRatio:options.aspectRatio||'9:16',waterMark:'',callBackUrl:callbackUrl});
+      const id=d.data?.taskId;
+      if(service&&userId&&id)await service.from('ai_generations').insert({user_id:userId,type:'video',prompt,model:'runway',task_id:id,status:'pending'});
+      return json({taskId:id,status:'wait',raw:d});
     }
     if(type==='music'){
-      const d=await kie('/api/v1/generate',{prompt,customMode:false,instrumental:false,model:options.model||'V5_5'});
-      return json({taskId:d.data?.taskId,status:'PENDING',raw:d});
+      const d=await kie('/api/v1/generate',{prompt,customMode:false,instrumental:false,model:options.model||'V5_5',callBackUrl:callbackUrl});
+      const id=d.data?.taskId;
+      if(service&&userId&&id)await service.from('ai_generations').insert({user_id:userId,type:'music',prompt,model:options.model||'V5_5',task_id:id,status:'pending'});
+      return json({taskId:id,status:'PENDING',raw:d});
     }
 
     const openai=Deno.env.get('OPENAI_API_KEY');
