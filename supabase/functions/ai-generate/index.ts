@@ -13,12 +13,6 @@ async function kie(path:string,body?:any,method='POST'){
   return d;
 }
 
-async function recordPending(type:string,prompt:string,model:string|null,taskId:string){
-  try{
-    const auth=undefined;
-  }catch(_){ }
-}
-
 function normalizeStatus(type:string,d:any){
   const data=d?.data||{};
   if(type==='video')return {status:data.state||'pending',url:data.videoInfo?.videoUrl,urls:data.videoInfo?.videoUrl?[data.videoInfo.videoUrl]:[],raw:d};
@@ -74,11 +68,12 @@ serve(async req=>{
       return json({taskId:id,status:'PENDING',raw:d});
     }
 
-    const openai=Deno.env.get('OPENAI_API_KEY');
-    if(!openai)throw new Error('OPENAI_API_KEY is not configured');
-    const r=await fetch('https://api.openai.com/v1/responses',{method:'POST',headers:{Authorization:`Bearer ${openai}`,'Content-Type':'application/json'},body:JSON.stringify({model:'gpt-5.6',input:prompt})});
+    const groq=Deno.env.get('GROQ_API_KEY');
+    if(!groq)throw new Error('GROQ_API_KEY is not configured');
+    const model=options.model||'openai/gpt-oss-120b';
+    const r=await fetch('https://api.groq.com/openai/v1/chat/completions',{method:'POST',headers:{Authorization:`Bearer ${groq}`,'Content-Type':'application/json'},body:JSON.stringify({model,messages:[{role:'system',content:'You are GG AI, a fast, helpful and premium AI assistant inside GG Messenger. Give accurate, useful and well-structured answers.'},{role:'user',content:prompt}],temperature:0.7})});
     const d=await r.json();
-    if(!r.ok)throw new Error(d.error?.message||'AI request failed');
-    return json({message:d.output_text||d.output?.map((x:any)=>x.content?.map((c:any)=>c.text).join('')).join('')||'',status:'success',raw:d});
+    if(!r.ok)throw new Error(d.error?.message||'Groq AI request failed');
+    return json({message:d.choices?.[0]?.message?.content||'',status:'success',model:d.model||model,raw:d});
   }catch(e){return json({error:e instanceof Error?e.message:'AI generation failed'},500)}
 });
