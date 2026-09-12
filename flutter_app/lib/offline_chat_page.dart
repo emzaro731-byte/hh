@@ -1,76 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'home_page.dart';
 import 'call_page.dart';
 import 'services/calls_repository.dart';
 import 'offline_store.dart';
 
-class OfflineChatPage extends StatefulWidget {
-  final Conversation conversation;
-  final bool dark;
-  const OfflineChatPage({super.key, required this.conversation, required this.dark});
-  @override State<OfflineChatPage> createState() => _OfflineChatPageState();
-}
-
+class OfflineChatPage extends StatefulWidget { final Conversation conversation; final bool dark; const OfflineChatPage({super.key,required this.conversation,required this.dark}); @override State<OfflineChatPage> createState()=>_OfflineChatPageState(); }
 class _OfflineChatPageState extends State<OfflineChatPage> {
-  final sb = Supabase.instance.client;
-  final input = TextEditingController();
-  List<Map<String, dynamic>> messages = [];
-  RealtimeChannel? channel;
-  String? uid;
-  bool loading = true, calling = false;
-
-  @override void initState() { super.initState(); uid = sb.auth.currentUser?.id; load(); }
-
-  Future<void> load() async {
-    if (uid == null) { if (mounted) setState(() => loading = false); return; }
-    final cached = await OfflineStore.loadMessages(uid!, widget.conversation.id);
-    if (mounted && cached.isNotEmpty) setState(() { messages = cached; loading = false; });
-    try {
-      final d = await sb.from('messages').select('*').eq('conversation_id', widget.conversation.id).order('created_at', ascending: true);
-      final fresh = List<Map<String, dynamic>>.from(d);
-      await OfflineStore.saveMessages(uid!, widget.conversation.id, fresh);
-      if (mounted) setState(() { messages = fresh; loading = false; });
-      channel = sb.channel('offline-cache-messages:${widget.conversation.id}')
-        ..onPostgresChanges(event: PostgresChangeEvent.insert, schema: 'public', table: 'messages', filter: PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'conversation_id', value: widget.conversation.id), callback: (p) async {
-          final m = Map<String, dynamic>.from(p.newRecord);
-          if (m['id'] != null && !messages.any((x) => x['id'] == m['id']) && mounted) {
-            setState(() => messages.add(m));
-            await OfflineStore.saveMessages(uid!, widget.conversation.id, messages);
-          }
-        }).subscribe();
-      if (uid != null) await sb.from('messages').update({'read_at': DateTime.now().toUtc().toIso8601String()}).eq('conversation_id', widget.conversation.id).neq('sender_id', uid!).isFilter('read_at', null);
-    } catch (_) {
-      if (mounted) setState(() => loading = false);
-    }
-  }
-
-  Future<void> send() async {
-    final text = input.text.trim(); if (text.isEmpty || uid == null) return;
-    input.clear();
-    final local = {'id':'local_${DateTime.now().microsecondsSinceEpoch}','conversation_id':widget.conversation.id,'sender_id':uid,'body':text,'message_type':'text','created_at':DateTime.now().toUtc().toIso8601String()};
-    setState(() => messages.add(local)); await OfflineStore.saveMessages(uid!, widget.conversation.id, messages);
-    try {
-      final m = await sb.from('messages').insert({'conversation_id':widget.conversation.id,'sender_id':uid,'body':text,'message_type':'text','delivered_at':DateTime.now().toUtc().toIso8601String()}).select().single();
-      if (mounted) setState(() { messages.removeWhere((x) => x['id'] == local['id']); if (!messages.any((x) => x['id'] == m['id'])) messages.add(Map<String,dynamic>.from(m)); });
-      await OfflineStore.saveMessages(uid!, widget.conversation.id, messages);
-    } catch (_) {}
-  }
-
-  Future<String?> peer() async {
-    if (uid == null) return null;
-    final r = await sb.from('conversation_members').select('user_id').eq('conversation_id', widget.conversation.id).neq('user_id', uid!).limit(1);
-    return r.isEmpty ? null : r.first['user_id']?.toString();
-  }
-  Future<void> call(bool video) async {
-    if (calling || uid == null) return;
-    try { setState(() => calling=true); final p=await peer(); if(p==null) throw Exception('Other participant not found'); final r=await sb.from('calls').insert({'caller_id':uid,'callee_id':p,'type':video?'video':'audio','status':'ringing'}).select().single(); await Navigator.push(context,MaterialPageRoute(builder:(_)=>CallPage(callId:r['id'].toString(),video:video,caller:true))); } catch(e) { if(mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text('Call failed: $e'))); } finally { if(mounted)setState(()=>calling=false); }
-  }
-  String time(dynamic v) { if(v==null)return ''; try{return TimeOfDay.fromDateTime(DateTime.parse(v.toString()).toLocal()).format(context);}catch(_){return '';} }
-
-  @override void dispose(){ if(channel!=null) sb.removeChannel(channel!); input.dispose(); super.dispose(); }
-  @override Widget build(BuildContext context) => Theme(data:widget.dark?ThemeData.dark(useMaterial3:true):ThemeData(useMaterial3:true,colorSchemeSeed:const Color(0xff2563eb)),child:Scaffold(
-    appBar:AppBar(title:Row(children:[CircleAvatar(child:Text(widget.conversation.name.isEmpty?'G':widget.conversation.name[0].toUpperCase())),const SizedBox(width:10),Expanded(child:Text(widget.conversation.name,overflow:TextOverflow.ellipsis))]),actions:[IconButton(onPressed:calling?null:()=>call(false),icon:const Icon(Icons.call)),IconButton(onPressed:calling?null:()=>call(true),icon:const Icon(Icons.videocam))]),
-    body:Column(children:[Expanded(child:loading?const Center(child:CircularProgressIndicator()):messages.isEmpty?const Center(child:Text('No messages cached yet')):ListView.builder(padding:const EdgeInsets.all(12),itemCount:messages.length,itemBuilder:(_,i){final m=messages[i];final mine=m['sender_id']==uid;return Align(alignment:mine?Alignment.centerRight:Alignment.centerLeft,child:Container(constraints:const BoxConstraints(maxWidth:330),margin:const EdgeInsets.only(bottom:8),padding:const EdgeInsets.all(12),decoration:BoxDecoration(color:mine?const Color(0xff2563eb):(widget.dark?const Color(0xff202938):const Color(0xffe7ebf2)),borderRadius:BorderRadius.circular(16)),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[if(m['message_type']=='text')Text((m['body']??'').toString(),style:TextStyle(color:mine?Colors.white:null,fontSize:15)),if(m['message_type']!='text')Row(children:[const Icon(Icons.insert_drive_file),const SizedBox(width:8),Expanded(child:Text((m['file_name']??m['body']??'Attachment').toString()))]),const SizedBox(height:4),Text(time(m['created_at']),style:TextStyle(color:mine?Colors.white70:Colors.grey,fontSize:10))])));}),),SafeArea(child:Padding(padding:const EdgeInsets.all(8),child:Row(children:[Expanded(child:TextField(controller:input,textInputAction:TextInputAction.send,onSubmitted:(_)=>send(),decoration:InputDecoration(hintText:'Message',filled:true,border:OutlineInputBorder(borderRadius:BorderRadius.circular(24))))),IconButton(onPressed:send,icon:const Icon(Icons.send,color:Color(0xff2563eb)))])))])
-  ));
+  final sb=Supabase.instance.client,input=TextEditingController(); List<Map<String,dynamic>> messages=[]; RealtimeChannel? channel; String? uid; bool loading=true,calling=false;
+  @override void initState(){super.initState();uid=sb.auth.currentUser?.id;load();}
+  Future<void> load() async { if(uid==null){if(mounted)setState(()=>loading=false);return;} final cached=await OfflineStore.loadMessages(uid!,widget.conversation.id); if(mounted&&cached.isNotEmpty)setState((){messages=cached;loading=false;}); try{final d=await sb.from('messages').select('*').eq('conversation_id',widget.conversation.id).order('created_at',ascending:true);final fresh=List<Map<String,dynamic>>.from(d);await OfflineStore.saveMessages(uid!,widget.conversation.id,fresh);if(mounted)setState((){messages=fresh;loading=false;});channel=sb.channel('chat:${widget.conversation.id}')..onPostgresChanges(event:PostgresChangeEvent.insert,schema:'public',table:'messages',filter:PostgresChangeFilter(type:PostgresChangeFilterType.eq,column:'conversation_id',value:widget.conversation.id),callback:(p)async{final m=Map<String,dynamic>.from(p.newRecord);if(m['id']!=null&&!messages.any((x)=>x['id']==m['id'])&&mounted){setState(()=>messages.add(m));await OfflineStore.saveMessages(uid!,widget.conversation.id,messages);}}).subscribe();await sb.from('messages').update({'read_at':DateTime.now().toUtc().toIso8601String()}).eq('conversation_id',widget.conversation.id).neq('sender_id',uid!).isFilter('read_at',null);}catch(_){if(mounted)setState(()=>loading=false);}}
+  Future<void> send() async {final text=input.text.trim();if(text.isEmpty||uid==null)return;input.clear();final local={'id':'local_${DateTime.now().microsecondsSinceEpoch}','conversation_id':widget.conversation.id,'sender_id':uid,'body':text,'message_type':'text','created_at':DateTime.now().toUtc().toIso8601String(),'_pending':true};setState(()=>messages.add(local));await OfflineStore.saveMessages(uid!,widget.conversation.id,messages);try{final m=await sb.from('messages').insert({'conversation_id':widget.conversation.id,'sender_id':uid,'body':text,'message_type':'text','delivered_at':DateTime.now().toUtc().toIso8601String()}).select().single();if(mounted)setState((){messages.removeWhere((x)=>x['id']==local['id']);if(!messages.any((x)=>x['id']==m['id']))messages.add(Map<String,dynamic>.from(m));});await OfflineStore.saveMessages(uid!,widget.conversation.id,messages);}catch(_){if(mounted)setState((){final i=messages.indexWhere((x)=>x['id']==local['id']);if(i>=0)messages[i]={...messages[i],'_offline':true};});await OfflineStore.saveMessages(uid!,widget.conversation.id,messages);}}
+  Future<String?> peer()async{if(uid==null)return null;final r=await sb.from('conversation_members').select('user_id').eq('conversation_id',widget.conversation.id).neq('user_id',uid!).limit(1);return r.isEmpty?null:r.first['user_id']?.toString();}
+  Future<void> call(bool video)async{if(calling||uid==null)return;try{setState(()=>calling=true);final p=await peer();if(p==null)throw Exception('Other participant not found');final r=await sb.from('calls').insert({'caller_id':uid,'callee_id':p,'type':video?'video':'audio','status':'ringing'}).select().single();if(mounted)await Navigator.push(context,MaterialPageRoute(builder:(_)=>CallPage(callId:r['id'].toString(),video:video,caller:true)));}catch(e){if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text('Call failed: $e')));}finally{if(mounted)setState(()=>calling=false);}}
+  String time(dynamic v){if(v==null)return '';try{return TimeOfDay.fromDateTime(DateTime.parse(v.toString()).toLocal()).format(context);}catch(_){return '';}}
+  String day(dynamic v){try{final d=DateTime.parse(v.toString()).toLocal();final n=DateTime.now();if(d.year==n.year&&d.month==n.month&&d.day==n.day)return'Today';return'${d.day}/${d.month}/${d.year}';}catch(_){return'';}}
+  Future<void> openUrl(dynamic u)async{if(u!=null&&u.toString().isNotEmpty)await launchUrl(Uri.parse(u.toString()),mode:LaunchMode.externalApplication);}
+  Widget bubble(Map<String,dynamic> m){final mine=m['sender_id']==uid;final type='${m['message_type']??'text'}';final url=m['file_url']??m['url']??m['media_url'];final pending=m['_pending']==true;final offline=m['_offline']==true;return Align(alignment:mine?Alignment.centerRight:Alignment.centerLeft,child:Container(constraints:const BoxConstraints(maxWidth:340),margin:EdgeInsets.only(left:mine?52:4,right:mine?4:52,bottom:7),padding:const EdgeInsets.fromLTRB(13,10,11,7),decoration:BoxDecoration(color:mine?const Color(0xff2563eb):(widget.dark?const Color(0xff202938):const Color(0xffe8edf5)),borderRadius:BorderRadius.only(topLeft:const Radius.circular(18),topRight:const Radius.circular(18),bottomLeft:Radius.circular(mine?18:5),bottomRight:Radius.circular(mine?5:18))),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[if(url!=null&&type.contains('image'))ClipRRect(borderRadius:BorderRadius.circular(13),child:GestureDetector(onTap:()=>openUrl(url),child:Image.network(url.toString(),height:190,width:300,fit:BoxFit.cover,errorBuilder:(_,__,___)=>Container(height:100,width:300,alignment:Alignment.center,child:const Icon(Icons.broken_image_outlined,size:40))))),if(url!=null&&!type.contains('image'))InkWell(onTap:()=>openUrl(url),child:Row(mainAxisSize:MainAxisSize.min,children:[Icon(type.contains('video')?Icons.play_circle_fill:type.contains('audio')?Icons.headphones:Icons.insert_drive_file,color:mine?Colors.white:null),const SizedBox(width:9),Flexible(child:Text('${m['file_name']??'Open attachment'}',style:TextStyle(color:mine?Colors.white:null,fontWeight:FontWeight.w600)))])),if((m['body']??'').toString().isNotEmpty&&!(url!=null&&type!='text'))Text('${m['body']}',style:TextStyle(color:mine?Colors.white:null,fontSize:16,height:1.3)),const SizedBox(height:3),Row(mainAxisSize:MainAxisSize.min,children:[Text(time(m['created_at']),style:TextStyle(color:mine?Colors.white70:Colors.grey,fontSize:10)),if(mine)Padding(padding:const EdgeInsets.only(left:5),child:Icon(pending?Icons.schedule:offline?Icons.cloud_off:Icons.done_all,size:14,color:mine?Colors.white70:Colors.grey))])])));}
+  @override void dispose(){if(channel!=null)sb.removeChannel(channel!);input.dispose();super.dispose();}
+  @override Widget build(BuildContext context){return Theme(data:widget.dark?ThemeData.dark(useMaterial3:true):ThemeData(useMaterial3:true,colorSchemeSeed:const Color(0xff2563eb)),child:Scaffold(backgroundColor:widget.dark?const Color(0xff0f1117):const Color(0xfff7f8fc),appBar:AppBar(elevation:0,titleSpacing:0,title:Row(children:[CircleAvatar(radius:21,child:Text(widget.conversation.name.isEmpty?'G':widget.conversation.name[0].toUpperCase())),const SizedBox(width:10),Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[Text(widget.conversation.name,style:const TextStyle(fontWeight:FontWeight.w800),overflow:TextOverflow.ellipsis),Text('Secure chat',style:TextStyle(fontSize:11,color:Theme.of(context).colorScheme.onSurfaceVariant))])),]),actions:[IconButton(onPressed:calling?null:()=>call(false),icon:const Icon(Icons.call_rounded)),IconButton(onPressed:calling?null:()=>call(true),icon:const Icon(Icons.videocam_rounded))]),body:Column(children:[Expanded(child:loading?const Center(child:CircularProgressIndicator()):messages.isEmpty?const Center(child:Text('No messages yet')):ListView.builder(reverse:false,padding:const EdgeInsets.fromLTRB(10,16,10,10),itemCount:messages.length,itemBuilder:(_,i){final m=messages[i];final prev=i>0?messages[i-1]:null;final showDay=prev==null||day(prev['created_at'])!=day(m['created_at']);return Column(children:[if(showDay)Padding(padding:const EdgeInsets.symmetric(vertical:12),child(Container(padding:const EdgeInsets.symmetric(horizontal:12,vertical:6),decoration:BoxDecoration(color:Theme.of(context).colorScheme.surfaceContainerHighest,borderRadius:BorderRadius.circular(14)),child:Text(day(m['created_at']),style:const TextStyle(fontSize:11,fontWeight:FontWeight.w700)))),bubble(m)]);}),),SafeArea(child(Padding(padding:const EdgeInsets.fromLTRB(8,6,8,8),child:Row(crossAxisAlignment:CrossAxisAlignment.end,children:[IconButton(onPressed:()=>ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('Attachments are available when storage is connected.'))),icon:const Icon(Icons.add_circle_outline)),Expanded(child(TextField(controller:input,textInputAction:TextInputAction.new,minLines:1,maxLines:5,onSubmitted:(_){if(input.text.trim().isNotEmpty)send();},decoration:InputDecoration(hintText:'Message',filled:true,prefixIcon:const Icon(Icons.emoji_emotions_outlined),suffixIcon:IconButton(onPressed:()=>input.clear(),icon:const Icon(Icons.close,size:18)),border:OutlineInputBorder(borderRadius:BorderRadius.circular(26),borderSide:BorderSide.none)))),const SizedBox(width:5),ValueListenableBuilder<TextEditingValue>(valueListenable:input,builder:(_,v,__)= >FloatingActionButton.small(onPressed:v.text.trim().isEmpty?null:send,child:Icon(v.text.trim().isEmpty?Icons.mic_rounded:Icons.send_rounded)))])))])]);}
 }
