@@ -350,7 +350,16 @@ class _ViewerState extends State<_Viewer> {
                       SizedBox(height: 420, width: double.infinity, child: ClipRRect(borderRadius: BorderRadius.circular(16), child: _Media(status: widget.status))),
                       if (widget.status['type'] == 'text') Padding(padding: const EdgeInsets.all(12), child: Text(widget.status['text'] ?? '', style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w700))),
                       const SizedBox(height: 8),
-                      Row(mainAxisAlignment: MainAxisAlignment.center, children: ['❤️', '😂', '👍', '😮', '😢'].map((emoji) => IconButton(onPressed: () => react(emoji), color: reaction == emoji ? Colors.amber : Colors.white, icon: Text(emoji, style: const TextStyle(fontSize: 24))).toList()),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: ['❤️', '😂', '👍', '😮', '😢']
+                            .map((emoji) => IconButton(
+                                  onPressed: () => react(emoji),
+                                  color: reaction == emoji ? Colors.amber : Colors.white,
+                                  icon: Text(emoji, style: const TextStyle(fontSize: 24)),
+                                ))
+                            .toList(),
+                      ),
                       const Divider(color: Colors.white24),
                       Align(alignment: Alignment.centerLeft, child: Text('Replies (${replies.length})', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
                       ...replies.map((r) => ListTile(dense: true, textColor: Colors.white, title: Text(r['body'] ?? ''), subtitle: Text('${r['created_at'] ?? ''}', style: const TextStyle(color: Colors.white54)))),
