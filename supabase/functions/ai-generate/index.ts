@@ -26,11 +26,53 @@ function normalizeStatus(type:string,d:any){
   return {status:data.state||'pending',url:urls[0],urls,raw:d};
 }
 
+// KIE model catalog exposed to the app. KIE continually adds models, so the UI
+// can offer these stable model IDs while the backend keeps provider secrets private.
+const MODELS={
+  image:[
+    {id:'seedream/5.0-lite',name:'Seedream 5.0 Lite',speed:'Fast'},
+    {id:'seedream/5.0-pro',name:'Seedream 5.0 Pro',speed:'Quality'},
+    {id:'google/imagen4-fast',name:'Google Imagen 4 Fast',speed:'Fast'},
+    {id:'google/imagen4',name:'Google Imagen 4',speed:'Quality'},
+    {id:'google/nano-banana-2',name:'Nano Banana 2',speed:'Fast'},
+    {id:'google/nano-banana-pro',name:'Nano Banana Pro',speed:'Quality'},
+    {id:'flux-2/flex-text-to-image',name:'Flux 2 Flex',speed:'Fast'},
+    {id:'flux-2/pro-text-to-image',name:'Flux 2 Pro',speed:'Quality'},
+    {id:'grok-imagine/text-to-image',name:'Grok Imagine',speed:'Fast'},
+    {id:'gpt-image-2',name:'GPT Image 2',speed:'Quality'},
+    {id:'z-image',name:'Z-image',speed:'Fast'},
+  ],
+  video:[
+    {id:'kling-3.0',name:'Kling 3.0',speed:'Quality'},
+    {id:'kling/v3-turbo-text-to-video',name:'Kling V3 Turbo',speed:'Fast'},
+    {id:'kling-2.6/text-to-video',name:'Kling 2.6',speed:'Fast'},
+    {id:'veo3/veo-3.1-fast',name:'Veo 3.1 Fast',speed:'Fast'},
+    {id:'veo3/veo-3.1-quality',name:'Veo 3.1 Quality',speed:'Quality'},
+    {id:'pixverse/v6-text-to-video',name:'PixVerse V6',speed:'Fast'},
+    {id:'wan/2.7-text-to-video',name:'Wan 2.7',speed:'Fast'},
+    {id:'runway',name:'Runway',speed:'Quality'},
+    {id:'grok-imagine/text-to-video',name:'Grok Imagine Video',speed:'Fast'},
+    {id:'seedance/2.0',name:'Seedance 2.0',speed:'Fast'},
+  ],
+  music:[
+    {id:'V6',name:'Suno V6',speed:'Quality'},
+    {id:'V6_MINI',name:'Suno V6 Mini',speed:'Fast'},
+    {id:'V6_WILD',name:'Suno V6 Wild',speed:'Creative'},
+    {id:'V5_5',name:'Suno V5.5',speed:'Quality'},
+    {id:'V5',name:'Suno V5',speed:'Fast'},
+    {id:'V4_5ALL',name:'Suno V4.5 All',speed:'Fast'},
+    {id:'V4_5PLUS',name:'Suno V4.5 Plus',speed:'Quality'},
+    {id:'V4_5',name:'Suno V4.5',speed:'Fast'},
+    {id:'V4',name:'Suno V4',speed:'Classic'},
+  ]
+};
+
 serve(async req=>{
   if(req.method==='OPTIONS')return new Response('ok',{headers:cors});
   try{
     const body=await req.json();
     const {type,prompt,options={},action='generate',taskId}=body;
+    if(action==='models')return json({models:MODELS});
     const auth=req.headers.get('Authorization');
     const serviceKey=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
     const service=serviceKey?createClient(Deno.env.get('SUPABASE_URL')!,serviceKey,{global:{headers:auth?{Authorization:auth}:{}}}):null;
@@ -40,7 +82,8 @@ serve(async req=>{
     if(action==='status'){
       if(!taskId)return json({error:'taskId is required'},400);
       let d;
-      if(type==='video')d=await kie(`/api/v1/runway/record-detail?taskId=${encodeURIComponent(taskId)}`,undefined,'GET');
+      if(type==='video'&&options.statusEndpoint)d=await kie(options.statusEndpoint,undefined,'GET');
+      else if(type==='video'&&options.model?.startsWith('runway'))d=await kie(`/api/v1/runway/record-detail?taskId=${encodeURIComponent(taskId)}`,undefined,'GET');
       else if(type==='music')d=await kie(`/api/v1/generate/record-info?taskId=${encodeURIComponent(taskId)}`,undefined,'GET');
       else d=await kie(`/api/v1/jobs/recordInfo?taskId=${encodeURIComponent(taskId)}`,undefined,'GET');
       return json(normalizeStatus(type,d));
@@ -50,22 +93,33 @@ serve(async req=>{
     const callbackUrl=`${Deno.env.get('SUPABASE_URL')}/functions/v1/ai-callback`;
 
     if(type==='image'){
-      const d=await kie('/api/v1/jobs/createTask',{model:options.model||'flux-2/flex-text-to-image',callBackUrl:callbackUrl,input:{prompt,aspect_ratio:options.aspectRatio||'1:1',resolution:'1K',nsfw_checker:false}});
+      const model=options.model||'google/imagen4-fast';
+      const d=await kie('/api/v1/jobs/createTask',{model,callBackUrl:callbackUrl,input:{prompt,aspect_ratio:options.aspectRatio||'1:1',resolution:options.resolution||'1K',nsfw_checker:false}});
       const id=d.data?.taskId;
-      if(service&&userId&&id)await service.from('ai_generations').insert({user_id:userId,type:'image',prompt,model:options.model||'flux-2/flex-text-to-image',task_id:id,status:'pending'});
-      return json({taskId:id,status:'pending',raw:d});
+      if(service&&userId&&id)await service.from('ai_generations').insert({user_id:userId,type:'image',prompt,model,task_id:id,status:'pending'});
+      return json({taskId:id,status:'pending',model,raw:d});
     }
     if(type==='video'){
-      const d=await kie('/api/v1/runway/generate',{prompt,duration:options.duration||5,quality:options.quality||'720p',aspectRatio:options.aspectRatio||'9:16',waterMark:'',callBackUrl:callbackUrl});
+      const model=options.model||'kling/v3-turbo-text-to-video';
+      if(model==='runway'){
+        const d=await kie('/api/v1/runway/generate',{prompt,duration:options.duration||5,quality:options.quality||'720p',aspectRatio:options.aspectRatio||'9:16',waterMark:'',callBackUrl:callbackUrl});
+        const id=d.data?.taskId;
+        if(service&&userId&&id)await service.from('ai_generations').insert({user_id:userId,type:'video',prompt,model,task_id:id,status:'pending'});
+        return json({taskId:id,status:'wait',model,raw:d});
+      }
+      const input:any={prompt,aspect_ratio:options.aspectRatio||'9:16',duration:options.duration||5,quality:options.quality||'720p'};
+      if(model.includes('kling')||model.includes('pixverse'))input.generate_audio_switch=options.generateAudio??false;
+      const d=await kie('/api/v1/jobs/createTask',{model,callBackUrl:callbackUrl,input});
       const id=d.data?.taskId;
-      if(service&&userId&&id)await service.from('ai_generations').insert({user_id:userId,type:'video',prompt,model:'runway',task_id:id,status:'pending'});
-      return json({taskId:id,status:'wait',raw:d});
+      if(service&&userId&&id)await service.from('ai_generations').insert({user_id:userId,type:'video',prompt,model,task_id:id,status:'pending'});
+      return json({taskId:id,status:'pending',model,raw:d});
     }
     if(type==='music'){
-      const d=await kie('/api/v1/generate',{prompt,customMode:false,instrumental:false,model:options.model||'V5_5',callBackUrl:callbackUrl});
+      const model=options.model||'V6_MINI';
+      const d=await kie('/api/v1/generate',{prompt,customMode:false,instrumental:options.instrumental??false,model,callBackUrl:callbackUrl});
       const id=d.data?.taskId;
-      if(service&&userId&&id)await service.from('ai_generations').insert({user_id:userId,type:'music',prompt,model:options.model||'V5_5',task_id:id,status:'pending'});
-      return json({taskId:id,status:'PENDING',raw:d});
+      if(service&&userId&&id)await service.from('ai_generations').insert({user_id:userId,type:'music',prompt,model,task_id:id,status:'pending'});
+      return json({taskId:id,status:'PENDING',model,raw:d});
     }
 
     const groq=Deno.env.get('GROQ_API_KEY');
