@@ -14,7 +14,7 @@ class NotificationService {
     await Firebase.initializeApp();
     FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
 
-    const android = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const android = AndroidInitializationSettings('@drawable/gg_messenger_icon');
     await localNotifications.initialize(
       const InitializationSettings(android: android),
     );
