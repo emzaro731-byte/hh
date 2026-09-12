@@ -44,24 +44,18 @@ jobs:
           echo "FIREBASE_ANDROID_PACKAGE=$PACKAGE" >> "$GITHUB_ENV"
           echo "Firebase Android package detected: $PACKAGE"
 
-      - name: Reset Flutter generated state
+      - name: Restore Flutter dependencies
         run: |
           set -e
           rm -rf .dart_tool build
           flutter pub get
 
-      - name: Generate GG launcher icons
+      - name: Verify GG icon asset
         run: |
           set -e
-          sudo apt-get update
-          sudo apt-get install -y librsvg2-bin
-          for spec in "mdpi 48" "hdpi 72" "xhdpi 96" "xxhdpi 144" "xxxhdpi 192"; do
-            density=$(echo "$spec" | cut -d' ' -f1)
-            size=$(echo "$spec" | cut -d' ' -f2)
-            mkdir -p "android/app/src/main/res/mipmap-$density"
-            rsvg-convert -w "$size" -h "$size" assets/gg_messenger_logo.svg -o "android/app/src/main/res/mipmap-$density/ic_launcher.png"
-          done
-          echo "GG launcher icons generated from assets/gg_messenger_logo.svg"
+          test -f assets/gg_messenger_logo.svg
+          echo "Using the existing GG icon asset: assets/gg_messenger_logo.svg"
+          echo "GitHub will NOT generate, redraw, recolor, or replace the icon."
 
       - name: Verify Flutter source
         run: |
