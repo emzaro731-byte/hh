@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'chat_page.dart';
 import 'ai_page.dart';
+import 'call_page.dart';
+import 'services/calls_repository.dart';
 
 class Conversation {
   final String id, name, message, time;
@@ -19,11 +21,14 @@ class _HomePageState extends State<HomePage> {
   String query = '';
   List<Conversation> chats = [];
   final sb = Supabase.instance.client;
+  RealtimeChannel? incomingChannel;
+  final Set<String> shownCalls = {};
 
   @override
   void initState() {
     super.initState();
     refresh();
+    _listenForIncomingCalls();
   }
 
   String clock(dynamic v) {
@@ -61,6 +66,46 @@ class _HomePageState extends State<HomePage> {
   }
 
   void snack(String s) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s)));
+
+  void _listenForIncomingCalls() {
+    final u = sb.auth.currentUser;
+    if (u == null) return;
+    incomingChannel = CallsRepository(sb).subscribeToIncoming(u.id, _showIncomingCall);
+  }
+
+  Future<void> _showIncomingCall(CallRecord call) async {
+    if (!mounted || call.status != 'ringing' || shownCalls.contains(call.id)) return;
+    shownCalls.add(call.id);
+    String callerName = 'GG User';
+    try {
+      final p = await sb.from('profiles').select('display_name').eq('id', call.callerId).maybeSingle();
+      callerName = (p?['display_name'] ?? 'GG User').toString();
+    } catch (_) {}
+    if (!mounted) return;
+    final video = call.type == 'video';
+    final answer = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => AlertDialog(
+        title: Text(video ? 'Incoming video call' : 'Incoming voice call'),
+        content: Text('$callerName is calling you.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Decline')),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Answer')),
+        ],
+      ),
+    );
+    if (!mounted) return;
+    try {
+      if (answer == true) {
+        await Navigator.push(context, MaterialPageRoute(builder: (_) => CallPage(callId: call.id, video: video, caller: false)));
+      } else {
+        await CallsRepository(sb).setStatus(call.id, 'rejected');
+      }
+    } catch (e) {
+      snack('Call error: $e');
+    }
+  }
 
   Future<String> createDirect(String other) async {
     final me = sb.auth.currentUser!.id;
@@ -122,6 +167,12 @@ class _HomePageState extends State<HomePage> {
       ),
     );
     q.dispose();
+  }
+
+  @override
+  void dispose() {
+    if (incomingChannel != null) sb.removeChannel(incomingChannel!);
+    super.dispose();
   }
 
   @override
