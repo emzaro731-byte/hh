@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'chat_page.dart';
 import 'ai_page.dart';
 import 'call_page.dart';
+import 'status_page.dart';
 import 'services/calls_repository.dart';
 
 class Conversation {
@@ -12,8 +13,7 @@ class Conversation {
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
-  @override
-  State<HomePage> createState() => _HomePageState();
+  @override State<HomePage> createState() => _HomePageState();
 }
 
 class _HomePageState extends State<HomePage> {
@@ -24,18 +24,9 @@ class _HomePageState extends State<HomePage> {
   RealtimeChannel? incomingChannel;
   final Set<String> shownCalls = {};
 
-  @override
-  void initState() {
-    super.initState();
-    refresh();
-    _listenForIncomingCalls();
-  }
+  @override void initState() { super.initState(); refresh(); _listenForIncomingCalls(); }
 
-  String clock(dynamic v) {
-    if (v == null) return '';
-    final d = DateTime.parse(v.toString()).toLocal();
-    return TimeOfDay.fromDateTime(d).format(context);
-  }
+  String clock(dynamic v) { if (v == null) return ''; final d = DateTime.parse(v.toString()).toLocal(); return TimeOfDay.fromDateTime(d).format(context); }
 
   Future<void> refresh() async {
     setState(() => loading = true);
@@ -50,61 +41,28 @@ class _HomePageState extends State<HomePage> {
         if (c == null) continue;
         final others = await sb.from('conversation_members').select('user_id').eq('conversation_id', id).neq('user_id', u.id).limit(1);
         String name = c['is_group'] == true ? (c['title'] ?? 'Group').toString() : 'GG User';
-        if (others.isNotEmpty) {
-          final p = await sb.from('profiles').select('display_name').eq('id', others.first['user_id']).maybeSingle();
-          name = (p?['display_name'] ?? 'GG User').toString();
-        }
+        if (others.isNotEmpty) { final p = await sb.from('profiles').select('display_name').eq('id', others.first['user_id']).maybeSingle(); name = (p?['display_name'] ?? 'GG User').toString(); }
         final last = await sb.from('messages').select('body,created_at').eq('conversation_id', id).order('created_at', ascending: false).limit(1).maybeSingle();
         out.add(Conversation(id: id.toString(), name: name, message: (last?['body'] ?? 'No messages yet').toString(), time: clock(last?['created_at'])));
       }
       if (mounted) setState(() => chats = out);
-    } catch (e) {
-      snack(e.toString());
-    } finally {
-      if (mounted) setState(() => loading = false);
-    }
+    } catch (e) { snack(e.toString()); } finally { if (mounted) setState(() => loading = false); }
   }
 
   void snack(String s) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s)));
 
-  void _listenForIncomingCalls() {
-    final u = sb.auth.currentUser;
-    if (u == null) return;
-    incomingChannel = CallsRepository(sb).subscribeToIncoming(u.id, _showIncomingCall);
-  }
+  void _listenForIncomingCalls() { final u = sb.auth.currentUser; if (u == null) return; incomingChannel = CallsRepository(sb).subscribeToIncoming(u.id, _showIncomingCall); }
 
   Future<void> _showIncomingCall(CallRecord call) async {
     if (!mounted || call.status != 'ringing' || shownCalls.contains(call.id)) return;
     shownCalls.add(call.id);
     String callerName = 'GG User';
-    try {
-      final p = await sb.from('profiles').select('display_name').eq('id', call.callerId).maybeSingle();
-      callerName = (p?['display_name'] ?? 'GG User').toString();
-    } catch (_) {}
+    try { final p = await sb.from('profiles').select('display_name').eq('id', call.callerId).maybeSingle(); callerName = (p?['display_name'] ?? 'GG User').toString(); } catch (_) {}
     if (!mounted) return;
     final video = call.type == 'video';
-    final answer = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => AlertDialog(
-        title: Text(video ? 'Incoming video call' : 'Incoming voice call'),
-        content: Text('$callerName is calling you.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Decline')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Answer')),
-        ],
-      ),
-    );
+    final answer = await showDialog<bool>(context: context, barrierDismissible: false, builder: (_) => AlertDialog(title: Text(video ? 'Incoming video call' : 'Incoming voice call'), content: Text('$callerName is calling you.'), actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Decline')), FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Answer'))]));
     if (!mounted) return;
-    try {
-      if (answer == true) {
-        await Navigator.push(context, MaterialPageRoute(builder: (_) => CallPage(callId: call.id, video: video, caller: false)));
-      } else {
-        await CallsRepository(sb).setStatus(call.id, 'rejected');
-      }
-    } catch (e) {
-      snack('Call error: $e');
-    }
+    try { if (answer == true) { await Navigator.push(context, MaterialPageRoute(builder: (_) => CallPage(callId: call.id, video: video, caller: false))); } else { await CallsRepository(sb).setStatus(call.id, 'rejected'); } } catch (e) { snack('Call error: $e'); }
   }
 
   Future<String> createDirect(String other) async {
@@ -112,10 +70,7 @@ class _HomePageState extends State<HomePage> {
     final mine = await sb.from('conversation_members').select('conversation_id').eq('user_id', me);
     for (final r in mine) {
       final x = await sb.from('conversation_members').select('user_id').eq('conversation_id', r['conversation_id']).eq('user_id', other).maybeSingle();
-      if (x != null) {
-        final c = await sb.from('conversations').select('id').eq('id', r['conversation_id']).eq('is_group', false).maybeSingle();
-        if (c != null) return c['id'].toString();
-      }
+      if (x != null) { final c = await sb.from('conversations').select('id').eq('id', r['conversation_id']).eq('is_group', false).maybeSingle(); if (c != null) return c['id'].toString(); }
     }
     final c = await sb.from('conversations').insert({'is_group': false}).select('id').single();
     await sb.from('conversation_members').insert([{'conversation_id': c['id'], 'user_id': me}, {'conversation_id': c['id'], 'user_id': other}]);
@@ -124,94 +79,33 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> newChat() async {
     final q = TextEditingController();
-    await showDialog<dynamic>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Find a GG user'),
-        content: TextField(controller: q, decoration: const InputDecoration(hintText: 'Name or username')),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-          FilledButton(
-            onPressed: () async {
-              if (q.text.trim().isEmpty) return;
-              try {
-                final me = sb.auth.currentUser!.id;
-                final term = q.text.trim();
-                final users = await sb.from('profiles').select('id,display_name,username').neq('id', me).or('display_name.ilike.%$term%,username.ilike.%$term%').limit(20);
-                if (!context.mounted) return;
-                Navigator.pop(context);
-                if (users.isEmpty) {
-                  snack('No users found.');
-                  return;
-                }
-                final u = await showDialog<dynamic>(
-                  context: context,
-                  builder: (_) => SimpleDialog(
-                    title: const Text('Select user'),
-                    children: [for (final x in users) SimpleDialogOption(onPressed: () => Navigator.pop(context, x), child: Text(x['display_name'] ?? 'GG User'))],
-                  ),
-                );
-                if (u != null) {
-                  final id = await createDirect(u['id'].toString());
-                  if (context.mounted) {
-                    Navigator.push(context, MaterialPageRoute(builder: (_) => ChatPage(conversation: Conversation(id: id, name: u['display_name'] ?? 'GG User', message: '', time: ''), dark: dark))).then((_) => refresh());
-                  }
-                }
-              } catch (e) {
-                snack(e.toString());
-              }
-            },
-            child: const Text('Search'),
-          ),
-        ],
-      ),
-    );
+    await showDialog<dynamic>(context: context, builder: (_) => AlertDialog(title: const Text('Find a GG user'), content: TextField(controller: q, decoration: const InputDecoration(hintText: 'Name or username')), actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')), FilledButton(onPressed: () async {
+      if (q.text.trim().isEmpty) return;
+      try {
+        final me = sb.auth.currentUser!.id; final term = q.text.trim();
+        final users = await sb.from('profiles').select('id,display_name,username').neq('id', me).or('display_name.ilike.%$term%,username.ilike.%$term%').limit(20);
+        if (!context.mounted) return; Navigator.pop(context);
+        if (users.isEmpty) { snack('No users found.'); return; }
+        final u = await showDialog<dynamic>(context: context, builder: (_) => SimpleDialog(title: const Text('Select user'), children: [for (final x in users) SimpleDialogOption(onPressed: () => Navigator.pop(context, x), child: Text(x['display_name'] ?? 'GG User'))]));
+        if (u != null) { final id = await createDirect(u['id'].toString()); if (context.mounted) Navigator.push(context, MaterialPageRoute(builder: (_) => ChatPage(conversation: Conversation(id: id, name: u['display_name'] ?? 'GG User', message: '', time: ''), dark: dark))).then((_) => refresh()); }
+      } catch (e) { snack(e.toString()); }
+    }, child: const Text('Search'))]));
     q.dispose();
   }
 
-  @override
-  void dispose() {
-    if (incomingChannel != null) sb.removeChannel(incomingChannel!);
-    super.dispose();
-  }
+  @override void dispose() { if (incomingChannel != null) sb.removeChannel(incomingChannel!); super.dispose(); }
 
-  @override
-  Widget build(BuildContext c) {
+  @override Widget build(BuildContext c) {
     final list = chats.where((x) => x.name.toLowerCase().contains(query.toLowerCase())).toList();
-    return Theme(
-      data: dark ? ThemeData.dark(useMaterial3: true).copyWith(colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xff2563eb), brightness: Brightness.dark)) : ThemeData(useMaterial3: true, colorSchemeSeed: const Color(0xff2563eb)),
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('GG', style: TextStyle(fontWeight: FontWeight.w900)), Text('Messenger', style: TextStyle(fontSize: 12))]),
-          actions: [
-            IconButton(onPressed: () => setState(() => dark = !dark), icon: Icon(dark ? Icons.light_mode : Icons.dark_mode)),
-            IconButton(onPressed: newChat, icon: const Icon(Icons.add)),
-          ],
-        ),
-        body: Column(children: [
-          Padding(padding: const EdgeInsets.all(12), child: TextField(onChanged: (v) => setState(() => query = v), decoration: InputDecoration(prefixIcon: const Icon(Icons.search), hintText: 'Search conversations', filled: true, border: OutlineInputBorder(borderRadius: BorderRadius.circular(16))))),
-          Expanded(
-            child: loading
-                ? const Center(child: CircularProgressIndicator())
-                : list.isEmpty
-                    ? Center(child: Column(mainAxisSize: MainAxisSize.min, children: [const Icon(Icons.chat_bubble_outline, size: 54), const SizedBox(height: 12), const Text('No conversations yet', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)), FilledButton(onPressed: newChat, child: const Text('New conversation'))]))
-                    : ListView.builder(
-                        itemCount: list.length,
-                        itemBuilder: (_, i) {
-                          final x = list[i];
-                          return ListTile(
-                            leading: CircleAvatar(child: Text(x.name.isEmpty ? 'G' : x.name[0].toUpperCase())),
-                            title: Text(x.name, style: const TextStyle(fontWeight: FontWeight.w700)),
-                            subtitle: Text(x.message, maxLines: 1, overflow: TextOverflow.ellipsis),
-                            trailing: Text(x.time, style: const TextStyle(fontSize: 11)),
-                            onTap: () => Navigator.push(c, MaterialPageRoute(builder: (_) => ChatPage(conversation: x, dark: dark))).then((_) => refresh()),
-                          );
-                        },
-                      ),
-          ),
-        ]),
-        floatingActionButton: FloatingActionButton(onPressed: () => Navigator.push(c, MaterialPageRoute(builder: (_) => const AIPage())), child: const Icon(Icons.auto_awesome)),
+    return Theme(data: dark ? ThemeData.dark(useMaterial3: true).copyWith(colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xff2563eb), brightness: Brightness.dark)) : ThemeData(useMaterial3: true, colorSchemeSeed: const Color(0xff2563eb)), child: Scaffold(
+      appBar: AppBar(title: const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('GG', style: TextStyle(fontWeight: FontWeight.w900)), Text('Messenger', style: TextStyle(fontSize: 12))]), actions: [
+        IconButton(tooltip: 'Status', onPressed: () => Navigator.push(c, MaterialPageRoute(builder: (_) => const StatusPage())), icon: const Icon(Icons.camera_alt_outlined)),
+        IconButton(onPressed: () => setState(() => dark = !dark), icon: Icon(dark ? Icons.light_mode : Icons.dark_mode)),
+        IconButton(onPressed: newChat, icon: const Icon(Icons.add)),
+      ],
       ),
-    );
+      body: Column(children: [Padding(padding: const EdgeInsets.all(12), child: TextField(onChanged: (v) => setState(() => query = v), decoration: InputDecoration(prefixIcon: const Icon(Icons.search), hintText: 'Search conversations', filled: true, border: OutlineInputBorder(borderRadius: BorderRadius.circular(16))))), Expanded(child: loading ? const Center(child: CircularProgressIndicator()) : list.isEmpty ? Center(child: Column(mainAxisSize: MainAxisSize.min, children: [const Icon(Icons.chat_bubble_outline, size: 54), const SizedBox(height: 12), const Text('No conversations yet', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)), FilledButton(onPressed: newChat, child: const Text('New conversation'))])) : ListView.builder(itemCount: list.length, itemBuilder: (_, i) { final x = list[i]; return ListTile(leading: CircleAvatar(child: Text(x.name.isEmpty ? 'G' : x.name[0].toUpperCase())), title: Text(x.name, style: const TextStyle(fontWeight: FontWeight.w700)), subtitle: Text(x.message, maxLines: 1, overflow: TextOverflow.ellipsis), trailing: Text(x.time, style: const TextStyle(fontSize: 11)), onTap: () => Navigator.push(c, MaterialPageRoute(builder: (_) => ChatPage(conversation: x, dark: dark))).then((_) => refresh())); }))]),
+      floatingActionButton: FloatingActionButton(onPressed: () => Navigator.push(c, MaterialPageRoute(builder: (_) => const AIPage())), child: const Icon(Icons.auto_awesome)),
+    ));
   }
 }
