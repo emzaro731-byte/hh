@@ -4,6 +4,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'home_page.dart';
+import 'call_page.dart';
 
 class ChatPage extends StatefulWidget {
   final Conversation conversation;
@@ -17,7 +18,7 @@ class _ChatPageState extends State<ChatPage> {
   final sb = Supabase.instance.client;
   final input = TextEditingController();
   List<Map<String, dynamic>> messages = [];
-  bool loading = true;
+  bool loading = true, calling = false;
   late RealtimeChannel channel;
   String? uid;
 
@@ -94,6 +95,37 @@ class _ChatPageState extends State<ChatPage> {
     }
   }
 
+  Future<String?> _peerId() async {
+    final me = sb.auth.currentUser?.id;
+    if (me == null) return null;
+    final rows = await sb.from('conversation_members').select('user_id').eq('conversation_id', widget.conversation.id).neq('user_id', me).limit(1);
+    if (rows.isEmpty) return null;
+    return rows.first['user_id']?.toString();
+  }
+
+  Future<void> startCall({required bool video}) async {
+    if (calling) return;
+    try {
+      setState(() => calling = true);
+      final peer = await _peerId();
+      if (peer == null) throw Exception('Could not find the other participant in this conversation.');
+      final row = await sb.from('calls').insert({
+        'caller_id': uid,
+        'callee_id': peer,
+        'type': video ? 'video' : 'audio',
+        'status': 'ringing',
+      }).select().single();
+      final callId = row['id'].toString();
+      try { await sb.functions.invoke('send-call-push', body: {'callId': callId}); } catch (_) {}
+      if (!mounted) return;
+      await Navigator.push(context, MaterialPageRoute(builder: (_) => CallPage(callId: callId, video: video, caller: true)));
+    } catch (e) {
+      if (mounted) snack('Call failed: $e');
+    } finally {
+      if (mounted) setState(() => calling = false);
+    }
+  }
+
   void snack(String s) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s)));
 
   String time(dynamic v) {
@@ -116,8 +148,8 @@ class _ChatPageState extends State<ChatPage> {
         appBar: AppBar(
           title: Row(children: [CircleAvatar(child: Text(widget.conversation.name.isEmpty ? 'G' : widget.conversation.name[0])), const SizedBox(width: 10), Text(widget.conversation.name)]),
           actions: [
-            IconButton(onPressed: () => snack('Connect flutter_webrtc to the existing calls tables for live voice.'), icon: const Icon(Icons.call)),
-            IconButton(onPressed: () => snack('Connect flutter_webrtc to the existing calls tables for live video.'), icon: const Icon(Icons.videocam)),
+            IconButton(tooltip: 'Voice call', onPressed: calling ? null : () => startCall(video: false), icon: const Icon(Icons.call)),
+            IconButton(tooltip: 'Video call', onPressed: calling ? null : () => startCall(video: true), icon: const Icon(Icons.videocam)),
           ],
         ),
         body: Column(children: [
