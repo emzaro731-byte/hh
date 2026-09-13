@@ -14,6 +14,21 @@ jobs:
           flutter-version: '3.24.5'
       - name: Generate Android project files
         run: flutter create --platforms=android --project-name=veylora_ai .
+      - name: Configure VEYLORA auth deep link
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('android/app/src/main/AndroidManifest.xml')
+          s = p.read_text()
+          marker = '''        <intent-filter>
+                    <action android:name="android.intent.action.VIEW" />
+                    <category android:name="android.intent.category.DEFAULT" />
+                    <category android:name="android.intent.category.BROWSABLE" />
+                    <data android:scheme="veylora" android:host="auth-callback" />
+                </intent-filter>\n'''
+          s = s.replace('</activity>', marker + '        </activity>', 1)
+          p.write_text(s)
+          PY
       - name: Install dependencies
         run: flutter pub get
       - name: Analyze
