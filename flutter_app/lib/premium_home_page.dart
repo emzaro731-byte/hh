@@ -140,6 +140,77 @@ class _PremiumHomePageState extends State<PremiumHomePage> {
 
   void _snack(String text) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
 
+  Future<void> _showProfile() async {
+    final user = sb.auth.currentUser;
+    String name = user?.userMetadata?['display_name']?.toString() ?? user?.email?.split('@').first ?? 'GG User';
+    String username = user?.userMetadata?['username']?.toString() ?? '';
+    try {
+      if (user != null) {
+        final profile = await sb.from('profiles').select('display_name,username').eq('id', user.id).maybeSingle();
+        name = '${profile?['display_name'] ?? name}';
+        username = '${profile?['username'] ?? username}';
+      }
+    } catch (_) {}
+    if (!mounted) return;
+    showDialog<void>(context: context, builder: (_) => AlertDialog(
+      title: const Text('Profile'),
+      content: Column(mainAxisSize: MainAxisSize.min, children: [
+        CircleAvatar(radius: 34, child: Text(name.isEmpty ? 'G' : name[0].toUpperCase(), style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold))),
+        const SizedBox(height: 14),
+        Text(name, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+        if (username.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 4), child: Text('@$username')),
+        if (user?.email != null) Padding(padding: const EdgeInsets.only(top: 4), child: Text(user!.email!, style: const TextStyle(fontSize: 12))),
+      ]),
+      actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close'))],
+    ));
+  }
+
+  Future<void> _showSettings() async {
+    await showDialog<void>(context: context, builder: (dialogContext) => StatefulBuilder(builder: (_, setDialogState) => AlertDialog(
+      title: const Text('Settings'),
+      content: Column(mainAxisSize: MainAxisSize.min, children: [
+        SwitchListTile(value: dark, onChanged: (value) { setState(() => dark = value); setDialogState(() {}); }, title: const Text('Dark mode'), secondary: const Icon(Icons.dark_mode_outlined)),
+        const ListTile(leading: Icon(Icons.notifications_outlined), title: Text('Notifications'), subtitle: Text('Managed by GG notification settings')),
+        const ListTile(leading: Icon(Icons.lock_outline), title: Text('Privacy'), subtitle: Text('Your chats are protected by your account security')),
+      ]),
+      actions: [TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Done'))],
+    )));
+  }
+
+  Future<void> _logout() async {
+    final confirmed = await showDialog<bool>(context: context, builder: (c) => AlertDialog(
+      title: const Text('Log out?'),
+      content: const Text('You can sign in again at any time.'),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
+        FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Log out')),
+      ],
+    ));
+    if (confirmed != true) return;
+    try {
+      await sb.auth.signOut();
+    } catch (e) {
+      if (mounted) _snack('Could not log out: $e');
+    }
+  }
+
+  void _openMenu() {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: dark ? const Color(0xFF15171B) : null,
+      builder: (sheetContext) => SafeArea(child: Column(mainAxisSize: MainAxisSize.min, children: [
+        ListTile(leading: const Icon(Icons.person_rounded), title: const Text('View profile'), onTap: () { Navigator.pop(sheetContext); _showProfile(); }),
+        ListTile(leading: const Icon(Icons.settings_rounded), title: const Text('Settings'), onTap: () { Navigator.pop(sheetContext); _showSettings(); }),
+        ListTile(leading: Icon(dark ? Icons.light_mode_rounded : Icons.dark_mode_rounded), title: Text(dark ? 'Light mode' : 'Dark mode'), onTap: () { setState(() => dark = !dark); Navigator.pop(sheetContext); }),
+        ListTile(leading: const Icon(Icons.help_outline_rounded), title: const Text('Help & support'), onTap: () { Navigator.pop(sheetContext); _snack('GG support is available from this account.'); }),
+        const Divider(height: 8),
+        ListTile(leading: const Icon(Icons.logout_rounded, color: Colors.redAccent), title: const Text('Logout', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.w700)), onTap: () { Navigator.pop(sheetContext); _logout(); }),
+        const SizedBox(height: 8),
+      ])),
+    );
+  }
+
   @override
   void dispose() {
     search.dispose();
@@ -163,8 +234,10 @@ class _PremiumHomePageState extends State<PremiumHomePage> {
             Text('${filtered.length} conversations', style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant, fontWeight: FontWeight.w500)),
           ]),
           actions: [
+            IconButton(tooltip: 'Profile', onPressed: _showProfile, icon: const Icon(Icons.person_outline_rounded)),
             IconButton(tooltip: 'Change theme', onPressed: () => setState(() => dark = !dark), icon: Icon(dark ? Icons.light_mode_rounded : Icons.dark_mode_rounded)),
-            const SizedBox(width: 10),
+            IconButton(tooltip: 'More', onPressed: _openMenu, icon: const Icon(Icons.more_vert_rounded)),
+            const SizedBox(width: 6),
           ],
         ),
         body: ListView(
@@ -205,7 +278,7 @@ class _PremiumHomePageState extends State<PremiumHomePage> {
     height: 76,
     margin: const EdgeInsets.symmetric(vertical: 5),
     decoration: BoxDecoration(color: cs.surfaceContainerHighest.withValues(alpha: .35), borderRadius: BorderRadius.circular(20)),
-    child: Row(children: [const SizedBox(width: 14), Container(width: 52, height: 52, decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white10)), const SizedBox(width: 14), Expanded(child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [Container(height: 12, width: 130, decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(8))), const SizedBox(height: 9), Container(height: 10, width: 190, decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(8)))]))]),
+    child: Row(children: [const SizedBox(width: 14), Container(width: 52, height: 52, decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.white10)), const SizedBox(width: 14), Expanded(child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [Container(height: 12, width: 130, decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(8))), const SizedBox(height: 9), Container(height: 10, width: 190, decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(8)))]))]),
   );
 
   Widget _chatTile(Conversation chat, ColorScheme cs) => Padding(
