@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'offline_store.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -22,9 +23,26 @@ class _ProfilePageState extends State<ProfilePage> {
   Future<void> _load() async {
     final u = sb.auth.currentUser;
     if (u == null) return;
+
+    // Show the last known profile immediately, even with no connection.
+    final cached = await OfflineStore.loadData(u.id, 'profile');
+    if (cached is Map && mounted) {
+      name.text = '${cached['display_name'] ?? ''}';
+      username.text = '${cached['username'] ?? ''}';
+      bio.text = '${cached['bio'] ?? ''}';
+      avatarUrl = cached['avatar_url']?.toString();
+      setState(() => loading = false);
+    }
+
     try {
       final p = await sb.from('profiles').select('display_name,username,bio,avatar_url').eq('id', u.id).maybeSingle();
-      if (p != null) { name.text = '${p['display_name'] ?? ''}'; username.text = '${p['username'] ?? ''}'; bio.text = '${p['bio'] ?? ''}'; avatarUrl = p['avatar_url']?.toString(); }
+      if (p != null) {
+        name.text = '${p['display_name'] ?? ''}';
+        username.text = '${p['username'] ?? ''}';
+        bio.text = '${p['bio'] ?? ''}';
+        avatarUrl = p['avatar_url']?.toString();
+        await OfflineStore.saveData(u.id, 'profile', p);
+      }
     } catch (_) {}
     if (mounted) setState(() => loading = false);
   }
@@ -40,18 +58,41 @@ class _ProfilePageState extends State<ProfilePage> {
       await sb.storage.from('avatars').uploadBinary(path, bytes, fileOptions: const FileOptions(contentType: 'image/jpeg', upsert: true));
       final url = sb.storage.from('avatars').getPublicUrl(path);
       await sb.from('profiles').upsert({'id': u.id, 'avatar_url': url});
-      if (mounted) setState(() => avatarUrl = url);
+      avatarUrl = url;
+      await _cacheProfile();
+      if (mounted) setState(() {});
     } catch (e) { if (mounted) _snack('Avatar upload failed: $e'); }
     if (mounted) setState(() => saving = false);
+  }
+
+  Future<void> _cacheProfile() async {
+    final u = sb.auth.currentUser;
+    if (u == null) return;
+    await OfflineStore.saveData(u.id, 'profile', {
+      'display_name': name.text.trim(),
+      'username': username.text.trim(),
+      'bio': bio.text.trim(),
+      'avatar_url': avatarUrl,
+    });
   }
 
   Future<void> _save() async {
     final u = sb.auth.currentUser; if (u == null) return;
     setState(() => saving = true);
+    final local = {
+      'display_name': name.text.trim().isEmpty ? 'GG User' : name.text.trim(),
+      'username': username.text.trim().isEmpty ? null : username.text.trim(),
+      'bio': bio.text.trim(),
+      'avatar_url': avatarUrl,
+    };
+    // Save locally first so edits are not lost if the connection disappears.
+    await OfflineStore.saveData(u.id, 'profile', local);
     try {
-      await sb.from('profiles').upsert({'id': u.id, 'display_name': name.text.trim().isEmpty ? 'GG User' : name.text.trim(), 'username': username.text.trim().isEmpty ? null : username.text.trim(), 'bio': bio.text.trim(), 'avatar_url': avatarUrl});
+      await sb.from('profiles').upsert({'id': u.id, ...local});
       if (mounted) { _snack('Profile saved'); Navigator.pop(context, true); }
-    } catch (e) { if (mounted) _snack('Could not save profile: $e'); }
+    } catch (_) {
+      if (mounted) _snack('Saved offline. It will remain on this device.');
+    }
     if (mounted) setState(() => saving = false);
   }
 
