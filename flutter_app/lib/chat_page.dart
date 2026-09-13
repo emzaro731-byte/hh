@@ -1,13 +1,13 @@
 import 'dart:async';
 import 'dart:io';
-import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:record/record.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:record/record.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'home_page.dart';
 import 'call_page.dart';
+import 'home_page.dart';
 import 'offline_store.dart';
 
 class ChatPage extends StatefulWidget {
@@ -43,7 +43,9 @@ class _ChatPageState extends State<ChatPage> {
   Future<void> load() async {
     if (uid != null) {
       final cached = await OfflineStore.loadMessages(uid!, widget.conversation.id);
-      if (mounted && cached.isNotEmpty) setState(() { messages = cached; loading = false; });
+      if (mounted && cached.isNotEmpty) {
+        setState(() { messages = cached; loading = false; });
+      }
     }
     try {
       final data = await sb.from('messages').select('*').eq('conversation_id', widget.conversation.id).order('created_at', ascending: true);
@@ -53,24 +55,21 @@ class _ChatPageState extends State<ChatPage> {
       messages = merged.values.toList()..sort((a, b) => '${a['created_at'] ?? ''}'.compareTo('${b['created_at'] ?? ''}'));
       await saveCache();
       channel = sb.channel('messages:${widget.conversation.id}');
-      channel!.onPostgresChanges(
-        event: PostgresChangeEvent.insert,
-        schema: 'public',
-        table: 'messages',
-        filter: PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'conversation_id', value: widget.conversation.id),
-        callback: (payload) async {
-          final m = Map<String, dynamic>.from(payload.newRecord);
-          if (m['id'] != null && !messages.any((x) => x['id'] == m['id'])) {
-            messages.add(m);
-            messages.sort((a, b) => '${a['created_at'] ?? ''}'.compareTo('${b['created_at'] ?? ''}'));
-            await saveCache();
-            if (mounted) setState(() {});
-          }
-        },
-      ).subscribe();
+      channel!.onPostgresChanges(event: PostgresChangeEvent.insert, schema: 'public', table: 'messages', filter: PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'conversation_id', value: widget.conversation.id), callback: (payload) async {
+        final m = Map<String, dynamic>.from(payload.newRecord);
+        if (m['id'] != null && !messages.any((x) => x['id'] == m['id'])) {
+          messages.add(m);
+          messages.sort((a, b) => '${a['created_at'] ?? ''}'.compareTo('${b['created_at'] ?? ''}'));
+          await saveCache();
+          if (mounted) setState(() {});
+        }
+      }).subscribe();
+      if (uid != null) {
+        await sb.from('messages').update({'read_at': DateTime.now().toUtc().toIso8601String()}).eq('conversation_id', widget.conversation.id).neq('sender_id', uid!).isFilter('read_at', null);
+      }
       await flushOutbox();
     } catch (_) {}
-    if (mounted) setState(() => loading = false);
+    finally { if (mounted) setState(() => loading = false); }
   }
 
   Future<void> flushOutbox() async {
@@ -78,15 +77,11 @@ class _ChatPageState extends State<ChatPage> {
     final items = await OfflineStore.loadOutbox(uid!);
     for (final item in List<Map<String, dynamic>>.from(items)) {
       try {
-        final m = await sb.from('messages').insert({
-          'conversation_id': item['conversation_id'], 'sender_id': uid,
-          'body': item['body'], 'message_type': 'text',
-          'delivered_at': DateTime.now().toUtc().toIso8601String(),
-        }).select().single();
-        await OfflineStore.removeOutbox(uid!, item['local_id'].toString());
+        final row = await sb.from('messages').insert({'conversation_id': item['conversation_id'], 'sender_id': uid, 'body': item['body'], 'message_type': 'text', 'delivered_at': DateTime.now().toUtc().toIso8601String()}).select().single();
+        await OfflineStore.removeOutbox(uid!, '${item['local_id']}');
         if (item['conversation_id'] == widget.conversation.id) {
-          messages.removeWhere((v) => v['id'] == item['local_id']);
-          messages.add(Map<String, dynamic>.from(m));
+          messages.removeWhere((m) => m['id'] == item['local_id']);
+          if (!messages.any((m) => m['id'] == row['id'])) messages.add(Map<String, dynamic>.from(row));
           await saveCache();
           if (mounted) setState(() {});
         }
@@ -109,32 +104,38 @@ class _ChatPageState extends State<ChatPage> {
   Future<void> attach() async {
     final type = await showModalBottomSheet<String>(
       context: context,
-      builder: (_) => SafeArea(child: Wrap(children: [
-        ListTile(leading: const Icon(Icons.photo), title: const Text('Photo / Video'), onTap: () => Navigator.pop(context, 'media')),
-        ListTile(leading: const Icon(Icons.insert_drive_file), title: const Text('Document / File'), onTap: () => Navigator.pop(context, 'file')),
-        ListTile(leading: const Icon(Icons.mic), title: const Text('Voice message'), onTap: () => Navigator.pop(context, 'voice')),
+      builder: (ctx) => SafeArea(child: Wrap(children: [
+        ListTile(leading: const Icon(Icons.photo), title: const Text('Photo / Video'), onTap: () => Navigator.pop(ctx, 'media')),
+        ListTile(leading: const Icon(Icons.insert_drive_file), title: const Text('Document / File'), onTap: () => Navigator.pop(ctx, 'file')),
+        ListTile(leading: const Icon(Icons.mic), title: const Text('Voice message'), onTap: () => Navigator.pop(ctx, 'voice')),
       ])),
     );
     if (type == null || uid == null) return;
     if (type == 'voice') { await toggleRecording(); return; }
     try {
-      late String path; late String name; late String kind; String? mime;
+      String path, name, kind;
+      String? contentType;
       if (type == 'media') {
         final p = await ImagePicker().pickMedia();
         if (p == null) return;
-        name = p.name; mime = p.mimeType; kind = (mime ?? '').startsWith('video/') ? 'video' : 'image';
+        name = p.name;
+        contentType = p.mimeType;
+        kind = (contentType ?? '').startsWith('video/') ? 'video' : 'image';
         path = '${uid!}/${DateTime.now().millisecondsSinceEpoch}_$name';
-        await sb.storage.from('chat-media').upload(path, File(p.path), fileOptions: FileOptions(contentType: mime));
+        await sb.storage.from('chat-media').upload(path, File(p.path), fileOptions: FileOptions(contentType: contentType));
       } else {
         final p = await FilePicker.platform.pickFiles(withData: false);
         if (p == null || p.files.single.path == null) return;
-        name = p.files.single.name; kind = 'file';
+        name = p.files.single.name;
+        kind = 'file';
         path = '${uid!}/${DateTime.now().millisecondsSinceEpoch}_$name';
         await sb.storage.from('chat-media').upload(path, File(p.files.single.path!), fileOptions: const FileOptions(contentType: 'application/octet-stream'));
       }
       final url = await sb.storage.from('chat-media').createSignedUrl(path, 604800);
-      final m = await sb.from('messages').insert({'conversation_id': widget.conversation.id, 'sender_id': uid, 'body': name, 'message_type': kind, 'media_url': url, 'file_name': name, 'delivered_at': DateTime.now().toUtc().toIso8601String()}).select().single();
-      messages.add(Map<String, dynamic>.from(m)); await saveCache(); if (mounted) setState(() {});
+      final row = await sb.from('messages').insert({'conversation_id': widget.conversation.id, 'sender_id': uid, 'body': name, 'message_type': kind, 'media_url': url, 'file_name': name, 'delivered_at': DateTime.now().toUtc().toIso8601String()}).select().single();
+      messages.add(Map<String, dynamic>.from(row));
+      await saveCache();
+      if (mounted) setState(() {});
     } catch (e) { snack('Attachment failed: $e'); }
   }
 
@@ -145,8 +146,10 @@ class _ChatPageState extends State<ChatPage> {
         final path = await recorder.stop();
         if (mounted) setState(() => recording = false);
         if (path != null) await sendVoice(path);
-      } catch (e) { if (mounted) setState(() => recording = false); snack('Recording failed: $e'); }
-      if (mounted) setState(() => uploading = false);
+      } catch (e) {
+        if (mounted) setState(() => recording = false);
+        snack('Recording failed: $e');
+      } finally { if (mounted) setState(() => uploading = false); }
       return;
     }
     if (!await recorder.hasPermission()) { snack('Allow microphone permission for voice messages.'); return; }
@@ -164,18 +167,22 @@ class _ChatPageState extends State<ChatPage> {
       final path = '${uid!}/$name';
       await sb.storage.from('chat-media').upload(path, File(localPath), fileOptions: const FileOptions(contentType: 'audio/mp4'));
       final url = await sb.storage.from('chat-media').createSignedUrl(path, 604800);
-      final m = await sb.from('messages').insert({'conversation_id': widget.conversation.id, 'sender_id': uid, 'body': name, 'message_type': 'voice', 'media_url': url, 'file_name': name, 'delivered_at': DateTime.now().toUtc().toIso8601String()}).select().single();
-      messages.add(Map<String, dynamic>.from(m)); await saveCache(); if (mounted) setState(() {});
+      final row = await sb.from('messages').insert({'conversation_id': widget.conversation.id, 'sender_id': uid, 'body': name, 'message_type': 'voice', 'media_url': url, 'file_name': name, 'delivered_at': DateTime.now().toUtc().toIso8601String()}).select().single();
+      messages.add(Map<String, dynamic>.from(row));
+      await saveCache();
+      if (mounted) setState(() {});
       try { await File(localPath).delete(); } catch (_) {}
     } catch (e) { snack('Voice upload failed: $e'); }
   }
 
   Future<void> playVoice(String url) async {
-    try { await player.stop(); await player.setUrl(url); await player.play(); } catch (e) { snack('Audio playback failed: $e'); }
+    try { await player.stop(); await player.setUrl(url); await player.play(); }
+    catch (e) { snack('Audio playback failed: $e'); }
   }
 
   Future<String?> peerId() async {
-    final me = sb.auth.currentUser?.id; if (me == null) return null;
+    final me = sb.auth.currentUser?.id;
+    if (me == null) return null;
     final rows = await sb.from('conversation_members').select('user_id').eq('conversation_id', widget.conversation.id).neq('user_id', me).limit(1);
     return rows.isEmpty ? null : rows.first['user_id']?.toString();
   }
@@ -183,8 +190,9 @@ class _ChatPageState extends State<ChatPage> {
   Future<void> startCall({required bool video}) async {
     if (calling) return;
     try {
-      setState(() => calling = true);
-      final peer = await peerId(); if (peer == null) throw Exception('Could not find the other participant.');
+      if (mounted) setState(() => calling = true);
+      final peer = await peerId();
+      if (peer == null) throw Exception('Could not find the other participant.');
       final row = await sb.from('calls').insert({'caller_id': uid, 'callee_id': peer, 'type': video ? 'video' : 'audio', 'status': 'ringing'}).select().single();
       try { await sb.functions.invoke('send-call-push', body: {'callId': row['id']}); } catch (_) {}
       if (mounted) await Navigator.push(context, MaterialPageRoute(builder: (_) => CallPage(callId: row['id'].toString(), video: video, caller: true)));
@@ -192,11 +200,42 @@ class _ChatPageState extends State<ChatPage> {
     finally { if (mounted) setState(() => calling = false); }
   }
 
-  void snack(String s) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s)));
-  String time(dynamic v) { if (v == null) return ''; try { return TimeOfDay.fromDateTime(DateTime.parse(v.toString()).toLocal()).format(context); } catch (_) { return ''; } }
+  void snack(String message) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+
+  String time(dynamic value) {
+    if (value == null) return '';
+    try { return TimeOfDay.fromDateTime(DateTime.parse(value.toString()).toLocal()).format(context); }
+    catch (_) { return ''; }
+  }
 
   @override
-  void dispose() { syncTimer?.cancel(); recorder.dispose(); player.dispose(); if (channel != null) sb.removeChannel(channel!); input.dispose(); super.dispose(); }
+  void dispose() {
+    syncTimer?.cancel();
+    recorder.dispose();
+    player.dispose();
+    if (channel != null) sb.removeChannel(channel!);
+    input.dispose();
+    super.dispose();
+  }
+
+  Widget messageBubble(Map<String, dynamic> m) {
+    final mine = m['sender_id'] == uid;
+    final offline = m['_offline'] == true;
+    final kind = m['message_type'];
+    Widget content;
+    if (kind == 'image' && m['media_url'] != null) {
+      content = ClipRRect(borderRadius: BorderRadius.circular(10), child: Image.network(m['media_url'].toString(), height: 220, width: 300, fit: BoxFit.cover));
+    } else if (kind == 'video') {
+      content = Row(children: [const Icon(Icons.play_circle_fill, size: 42), const SizedBox(width: 8), Expanded(child: Text('${m['file_name'] ?? 'Video'}'))]);
+    } else if (kind == 'file') {
+      content = Row(children: [const Icon(Icons.insert_drive_file), const SizedBox(width: 8), Expanded(child: Text('${m['file_name'] ?? 'Document'}'))]);
+    } else if (kind == 'voice' && m['media_url'] != null) {
+      content = InkWell(onTap: () => playVoice(m['media_url'].toString()), child: const Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.play_arrow), SizedBox(width: 6), Text('Voice message')]));
+    } else {
+      content = Text('${m['body'] ?? ''}', style: TextStyle(color: mine ? Colors.white : null, fontSize: 15));
+    }
+    return Align(alignment: mine ? Alignment.centerRight : Alignment.centerLeft, child: Container(constraints: const BoxConstraints(maxWidth: 340), margin: const EdgeInsets.only(bottom: 8), padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: mine ? const Color(0xff2563eb) : (widget.dark ? const Color(0xff202938) : const Color(0xffe7ebf2)), borderRadius: BorderRadius.circular(16)), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [content, const SizedBox(height: 4), Row(mainAxisSize: MainAxisSize.min, children: [Text(time(m['created_at']), style: TextStyle(color: mine ? Colors.white70 : Colors.grey, fontSize: 10)), if (offline) const Padding(padding: EdgeInsets.only(left: 5), child: Icon(Icons.cloud_off, size: 13))])]));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -207,21 +246,12 @@ class _ChatPageState extends State<ChatPage> {
         IconButton(tooltip: 'Video call', onPressed: calling ? null : () => startCall(video: true), icon: const Icon(Icons.videocam)),
       ]),
       body: Column(children: [
-        Expanded(child: loading ? const Center(child: CircularProgressIndicator()) : ListView.builder(padding: const EdgeInsets.all(12), itemCount: messages.length, itemBuilder: (_, i) {
-          final m = messages[i]; final mine = m['sender_id'] == uid; final kind = m['message_type'];
-          return Align(alignment: mine ? Alignment.centerRight : Alignment.centerLeft, child: Container(constraints: const BoxConstraints(maxWidth: 340), margin: const EdgeInsets.only(bottom: 8), padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: mine ? const Color(0xff2563eb) : (widget.dark ? const Color(0xff202938) : const Color(0xffe7ebf2)), borderRadius: BorderRadius.circular(16)), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            if (kind == 'image' && m['media_url'] != null) Image.network(m['media_url'].toString(), height: 220, width: 300, fit: BoxFit.cover),
-            if (kind == 'video') Row(children: [const Icon(Icons.play_circle_fill, size: 42), const SizedBox(width: 8), Expanded(child: Text('${m['file_name'] ?? 'Video'}'))]),
-            if (kind == 'file') Row(children: [const Icon(Icons.insert_drive_file), const SizedBox(width: 8), Expanded(child: Text('${m['file_name'] ?? 'Document'}'))]),
-            if (kind == 'voice' && m['media_url'] != null) InkWell(onTap: () => playVoice(m['media_url'].toString()), child: const Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.play_arrow), SizedBox(width: 6), Text('Voice message')])),
-            if (kind == 'text') Text('${m['body'] ?? ''}', style: TextStyle(color: mine ? Colors.white : null, fontSize: 15)),
-            const SizedBox(height: 4), Row(mainAxisSize: MainAxisSize.min, children: [Text(time(m['created_at']), style: TextStyle(color: mine ? Colors.white70 : Colors.grey, fontSize: 10)), if (m['_offline'] == true) const Padding(padding: EdgeInsets.only(left: 5), child: Icon(Icons.cloud_off, size: 13))]),
-          ])));
-        })),
+        Expanded(child: loading ? const Center(child: CircularProgressIndicator()) : ListView.builder(padding: const EdgeInsets.all(12), itemCount: messages.length, itemBuilder: (_, i) => messageBubble(messages[i]))),
         SafeArea(child: Padding(padding: const EdgeInsets.all(8), child: Row(children: [
-          IconButton(onPressed: uploading ? null : attach, icon: Icon(recording ? Icons.stop_circle : Icons.add_circle_outline)),
+          IconButton(onPressed: uploading ? null : attach, icon: const Icon(Icons.add_circle_outline)),
           Expanded(child: TextField(controller: input, textInputAction: TextInputAction.send, onSubmitted: (_) => send(), decoration: InputDecoration(hintText: recording ? 'Recording voice…' : 'Message', filled: true, border: OutlineInputBorder(borderRadius: BorderRadius.circular(24))))),
-          IconButton(onPressed: recording ? toggleRecording : send, icon: Icon(recording ? Icons.stop : Icons.send, color: recording ? Colors.red : const Color(0xff2563eb))),
+          IconButton(onPressed: uploading ? null : toggleRecording, icon: Icon(recording ? Icons.stop_circle : Icons.mic), color: recording ? Colors.red : null),
+          IconButton(onPressed: recording || uploading ? null : send, icon: const Icon(Icons.send, color: Color(0xff2563eb))),
         ]))),
       ]),
     ));
