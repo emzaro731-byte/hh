@@ -16,5 +16,11 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^4.0.0
+
+dependency_overrides:
+  # Flutter 3.24.5 is incompatible with app_links 6.4.x Android Gradle setup.
+  # Supabase uses app_links for OAuth/deep-link handling.
+  app_links: 6.3.2
+
 flutter:
   uses-material-design: true
