@@ -31,7 +31,7 @@ jobs:
           s = p.read_text()
           s = s.replace('android:icon="@mipmap/ic_launcher"', 'android:icon="@drawable/veylora_icon"')
           s = s.replace('android:roundIcon="@mipmap/ic_launcher_round"', 'android:roundIcon="@drawable/veylora_icon"')
-          marker = '''        <intent-filter>\n                    <action android:name="android.intent.action.VIEW" />\n                    <category android:name="android.intent.category.DEFAULT" />\n                    <category android:name="android.intent.category.BROWSABLE" />\n                    <data android:scheme="veylora" android:host="auth-callback" />\n                </intent-filter>\n'''
+          marker = '''        <meta-data android:name="flutter_deeplinking_enabled" android:value="false" />\n        <intent-filter>\n                    <action android:name="android.intent.action.VIEW" />\n                    <category android:name="android.intent.category.DEFAULT" />\n                    <category android:name="android.intent.category.BROWSABLE" />\n                    <data android:scheme="veylora" android:host="auth-callback" />\n                </intent-filter>\n'''
           if 'android:scheme="veylora"' not in s:
               s = s.replace('</activity>', marker + '        </activity>', 1)
           p.write_text(s)
