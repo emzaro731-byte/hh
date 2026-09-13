@@ -1,41 +1,26 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'ai_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-const List<Map<String, String>> kieFreeImageModels = [
-  {'id': 'z-image', 'name': 'Z-Image Turbo', 'description': 'Free / trial image model'},
+const imageModels = [
+  {'id': 'z-image', 'name': 'Z-Image Turbo'},
+  {'id': 'seedream/5.0-lite', 'name': 'Seedream 5 Lite'},
+  {'id': 'seedream/5.0-pro', 'name': 'Seedream 5 Pro'},
+  {'id': 'google/imagen4-fast', 'name': 'Imagen 4 Fast'},
+  {'id': 'google/imagen4', 'name': 'Imagen 4'},
+  {'id': 'grok-imagine/text-to-image', 'name': 'Grok Imagine'},
+  {'id': 'gpt-image-2', 'name': 'GPT Image 2'},
 ];
-
-const List<Map<String, String>> kiePremiumImageModels = [
-  {'id': 'google/nano-banana-2', 'name': 'Nano Banana 2', 'description': 'Premium fast image generation'},
-  {'id': 'seedream/5.0-pro', 'name': 'Seedream 5 Pro', 'description': 'Premium expert image generation'},
-  {'id': 'google/imagen4', 'name': 'Imagen 4', 'description': 'Premium quality image generation'},
-  {'id': 'google/nano-banana-pro', 'name': 'Nano Banana Pro', 'description': 'Premium expert image generation'},
-  {'id': 'flux-2/pro-text-to-image', 'name': 'Flux 2 Pro', 'description': 'Premium quality image generation'},
-  {'id': 'grok-imagine/text-to-image', 'name': 'Grok Imagine', 'description': 'Premium creative image generation'},
-  {'id': 'gpt-image-2', 'name': 'GPT Image 2', 'description': 'Premium quality image generation'},
+const videoModels = [
+  {'id': 'wan/2-2-a14b-text-to-video-turbo', 'name': 'Wan 2.2 Turbo'},
+  {'id': 'pixverse/v6-text-to-video', 'name': 'PixVerse V6'},
+  {'id': 'kling-3.0-omni/text-to-video', 'name': 'Kling 3.0 Omni'},
 ];
-
-const List<Map<String, String>> kieFreeVideoModels = [
-  {'id': 'wan/2-2-a14b-text-to-video-turbo', 'name': 'Wan 2.2 A14B Turbo', 'description': 'Free / trial video model'},
-];
-
-const List<Map<String, String>> kiePremiumVideoModels = [
-  {'id': 'pixverse/v6-text-to-video', 'name': 'PixVerse V6', 'description': 'Premium fast video generation'},
-  {'id': 'kling-3.0-omni/text-to-video', 'name': 'Kling 3.0 Omni', 'description': 'Premium expert video generation'},
-  {'id': 'wan/2-7-text-to-video', 'name': 'Wan 2.7', 'description': 'Premium video generation'},
-];
-
-// KIE documents currently support V6_MINI for music generation.
-const List<Map<String, String>> kieFreeMusicModels = [
-  {'id': 'V6_MINI', 'name': 'Suno V6 Mini', 'description': 'KIE-supported free/trial music model'},
-];
-
-const List<Map<String, String>> kiePremiumMusicModels = [
-  {'id': 'V6', 'name': 'Suno V6', 'description': 'Premium music generation'},
-  {'id': 'V5_5', 'name': 'Suno V5.5', 'description': 'Premium music generation'},
-  {'id': 'V5', 'name': 'Suno V5', 'description': 'Premium music generation'},
-  {'id': 'V4_5ALL', 'name': 'Suno V4.5 All', 'description': 'Premium music generation'},
-  {'id': 'V4_5PLUS', 'name': 'Suno V4.5 Plus', 'description': 'Premium music generation'},
+const musicModels = [
+  {'id': 'V6_MINI', 'name': 'Suno V6 Mini'},
+  {'id': 'V6', 'name': 'Suno V6'},
+  {'id': 'V5_5', 'name': 'Suno V5.5'},
 ];
 
 class AIStudioPage extends StatefulWidget {
@@ -47,19 +32,17 @@ class AIStudioPage extends StatefulWidget {
 class _AIStudioPageState extends State<AIStudioPage> {
   String mode = 'chat';
   String plan = 'free';
-  String selectedImageModel = 'z-image';
-  String selectedVideoModel = 'wan/2-2-a14b-text-to-video-turbo';
-  String selectedMusicModel = 'V6_MINI';
-  bool loadingPlan = true;
+  String selectedImage = 'z-image';
+  String selectedVideo = 'wan/2-2-a14b-text-to-video-turbo';
+  String selectedMusic = 'V6_MINI';
+  final prompt = TextEditingController();
+  bool loading = false;
+  String status = '';
+  AIGeneration? result;
 
-  bool get isPremium => plan == 'go' || plan == 'plus' || plan == 'ultra';
-
-  List<Map<String, String>> get imageModels =>
-      isPremium ? [...kieFreeImageModels, ...kiePremiumImageModels] : kieFreeImageModels;
-  List<Map<String, String>> get videoModels =>
-      isPremium ? [...kieFreeVideoModels, ...kiePremiumVideoModels] : kieFreeVideoModels;
-  List<Map<String, String>> get musicModels =>
-      isPremium ? [...kieFreeMusicModels, ...kiePremiumMusicModels] : kieFreeMusicModels;
+  bool get premium => {'go', 'plus', 'ultra'}.contains(plan);
+  String get selectedModel => mode == 'image' ? selectedImage : mode == 'video' ? selectedVideo : selectedMusic;
+  List<Map<String, String>> get models => mode == 'image' ? imageModels : mode == 'video' ? videoModels : musicModels;
 
   @override
   void initState() {
@@ -67,114 +50,135 @@ class _AIStudioPageState extends State<AIStudioPage> {
     _loadPlan();
   }
 
+  @override
+  void dispose() {
+    prompt.dispose();
+    super.dispose();
+  }
+
   Future<void> _loadPlan() async {
     try {
       final user = Supabase.instance.client.auth.currentUser;
       if (user == null) return;
       final row = await Supabase.instance.client.from('profiles').select('ai_plan').eq('id', user.id).maybeSingle();
-      final next = (row?['ai_plan'] ?? 'free').toString();
       if (!mounted) return;
-      setState(() {
-        plan = {'free', 'go', 'plus', 'ultra'}.contains(next) ? next : 'free';
-        loadingPlan = false;
-        selectedImageModel = 'z-image';
-        selectedVideoModel = 'wan/2-2-a14b-text-to-video-turbo';
-        selectedMusicModel = 'V6_MINI';
+      setState(() => plan = {'free', 'go', 'plus', 'ultra'}.contains(row?['ai_plan']) ? row!['ai_plan'].toString() : 'free');
+    } catch (_) {}
+  }
+
+  void _changeMode(String value) {
+    setState(() {
+      mode = value;
+      result = null;
+      prompt.clear();
+    });
+  }
+
+  Future<void> _generate() async {
+    final text = prompt.text.trim();
+    if (text.isEmpty || loading) return;
+    setState(() {
+      loading = true;
+      result = null;
+      status = 'Connecting…';
+    });
+    try {
+      final options = {
+        'model': selectedModel,
+        'aspectRatio': mode == 'video' ? '16:9' : '1:1',
+        'resolution': '1K',
+        'duration': 5,
+        'quality': '720p',
+        'generateAudio': mode == 'video',
+      };
+      var done = await AIService.generate(mode, text, options);
+      if (mode != 'chat') {
+        if (done.taskId == null) throw Exception('The AI service did not return a task ID.');
+        done = await AIService.waitForResult(mode, done.taskId!, options, (s) {
+          if (mounted) setState(() => status = s);
+        });
+      }
+      if (mounted) {
+        setState(() {
+          result = done;
+          status = 'Complete';
+        });
+      }
+      try { await AIService.save(mode, text, done, selectedModel); } catch (_) {}
+    } catch (e) {
+      if (mounted) setState(() {
+        result = AIGeneration(message: e.toString().replaceFirst('Exception: ', ''));
+        status = 'Failed';
       });
-    } catch (_) {
-      if (mounted) setState(() => loadingPlan = false);
+    } finally {
+      if (mounted) setState(() => loading = false);
     }
   }
 
-  String get planLabel {
-    if (plan == 'go') return 'Go Premium';
-    if (plan == 'plus') return 'Plus Premium';
-    if (plan == 'ultra') return 'Ultra Premium';
-    return 'Free';
+  Future<void> _open(String url) async {
+    await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
   }
 
-  Widget _modelPicker({required String type}) {
-    final models = type == 'image' ? imageModels : type == 'video' ? videoModels : musicModels;
-    final selected = type == 'image' ? selectedImageModel : type == 'video' ? selectedVideoModel : selectedMusicModel;
-    final freeId = type == 'image' ? 'z-image' : type == 'video' ? 'wan/2-2-a14b-text-to-video-turbo' : 'V6_MINI';
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: DropdownButtonFormField<String>(
-        value: models.any((m) => m['id'] == selected) ? selected : models.first['id'],
-        decoration: InputDecoration(
-          labelText: isPremium ? 'KIE ${type[0].toUpperCase()}${type.substring(1)} Model • $planLabel' : 'KIE Free / Trial ${type[0].toUpperCase()}${type.substring(1)} Model',
-          prefixIcon: Icon(isPremium ? Icons.workspace_premium : Icons.lock_open),
-          border: const OutlineInputBorder(),
-        ),
-        items: models.map((m) {
-          final premium = m['id'] != freeId;
-          return DropdownMenuItem<String>(
-            value: m['id'],
-            child: Row(children: [Expanded(child: Text(m['name']!)), if (premium) const Icon(Icons.workspace_premium, size: 17)]),
-          );
-        }).toList(),
-        onChanged: loadingPlan ? null : (v) {
-          if (v == null) return;
-          setState(() {
-            if (type == 'image') selectedImageModel = v;
-            if (type == 'video') selectedVideoModel = v;
-            if (type == 'music') selectedMusicModel = v;
-          });
-        },
+  Widget _modelPicker() {
+    return DropdownButtonFormField<String>(
+      value: models.any((m) => m['id'] == selectedModel) ? selectedModel : models.first['id'],
+      decoration: InputDecoration(
+        labelText: premium ? 'AI Model • Premium' : 'AI Model • Free',
+        prefixIcon: const Icon(Icons.auto_awesome),
+        border: const OutlineInputBorder(),
       ),
+      items: models.map((m) => DropdownMenuItem(value: m['id'], child: Text(m['name']!))).toList(),
+      onChanged: loading ? null : (v) {
+        if (v == null) return;
+        setState(() {
+          if (mode == 'image') selectedImage = v;
+          if (mode == 'video') selectedVideo = v;
+          if (mode == 'music') selectedMusic = v;
+        });
+      },
     );
+  }
+
+  Widget _result() {
+    if (result == null) return const SizedBox.shrink();
+    if (result!.message != null && result!.url == null && result!.urls.isEmpty) {
+      return Card(child: Padding(padding: const EdgeInsets.all(16), child: Text(result!.message!)));
+    }
+    final urls = result!.urls.isNotEmpty ? result!.urls : (result!.url == null ? <String>[] : [result!.url!]);
+    return Column(children: [
+      if (mode == 'image' && urls.isNotEmpty)
+        ClipRRect(borderRadius: BorderRadius.circular(18), child: Image.network(urls.first, width: double.infinity, height: 330, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const SizedBox(height: 180, child: Center(child: Icon(Icons.broken_image, size: 60))))),
+      if (mode == 'chat' && result!.message != null)
+        Card(child: Padding(padding: const EdgeInsets.all(18), child: SelectableText(result!.message!))),
+      ...urls.map((u) => Padding(padding: const EdgeInsets.only(top: 10), child: SizedBox(width: double.infinity, child: OutlinedButton.icon(onPressed: () => _open(u), icon: Icon(mode == 'video' ? Icons.play_arrow : Icons.open_in_new), label: Text(mode == 'video' ? 'Open video' : mode == 'music' ? 'Open music' : 'Open image'))))),
+    ]);
   }
 
   @override
   Widget build(BuildContext context) {
+    final title = mode == 'chat' ? 'Ask anything' : mode == 'image' ? 'Create an image' : mode == 'video' ? 'Create a video' : 'Create music';
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('AI Studio'),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 12),
-            child: Center(child: Chip(avatar: Icon(isPremium ? Icons.workspace_premium : Icons.auto_awesome, size: 17), label: Text(planLabel))),
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          const SizedBox(height: 12),
-          if (mode == 'image') _modelPicker(type: 'image'),
-          if (mode == 'video') _modelPicker(type: 'video'),
-          if (mode == 'music') _modelPicker(type: 'music'),
-          if (!isPremium && (mode == 'image' || mode == 'video' || mode == 'music'))
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-              child: Card(
-                child: ListTile(
-                  leading: const Icon(Icons.workspace_premium),
-                  title: const Text('Unlock stronger KIE models'),
-                  subtitle: const Text('Premium plans can select advanced image, video and music models.'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Upgrade to a Premium plan to unlock stronger KIE models.'))),
-                ),
-              ),
-            ),
-          Expanded(
-            child: Center(
-              child: Text(
-                mode == 'image' ? 'Image: $selectedImageModel' : mode == 'video' ? 'Video: $selectedVideoModel' : mode == 'music' ? 'Music: $selectedMusicModel' : 'AI Studio • $planLabel',
-              ),
-            ),
-          ),
-        ],
-      ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: ['chat', 'image', 'video', 'music'].indexOf(mode),
-        onDestinationSelected: (i) => setState(() => mode = ['chat', 'image', 'video', 'music'][i]),
-        destinations: const [
-          NavigationDestination(icon: Icon(Icons.chat_bubble_outline), label: 'Chat'),
-          NavigationDestination(icon: Icon(Icons.image_outlined), label: 'Image'),
-          NavigationDestination(icon: Icon(Icons.movie_outlined), label: 'Video'),
-          NavigationDestination(icon: Icon(Icons.music_note_outlined), label: 'Music'),
-        ],
-      ),
+      appBar: AppBar(title: const Text('GG AI Studio'), actions: [Padding(padding: const EdgeInsets.only(right: 12), child: Chip(label: Text(premium ? 'Premium' : 'Free')))]),
+      body: SafeArea(child: Column(children: [
+        Padding(padding: const EdgeInsets.fromLTRB(12, 8, 12, 4), child: Row(children: [
+          for (final item in const [('chat', Icons.chat_bubble_outline, 'Ask'), ('image', Icons.image_outlined, 'Image'), ('video', Icons.movie_outlined, 'Video'), ('music', Icons.music_note_outlined, 'Music')])
+            Expanded(child: Padding(padding: const EdgeInsets.symmetric(horizontal: 3), child: ChoiceChip(label: Row(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(item.$2, size: 17), const SizedBox(width: 4), Text(item.$3)]), selected: mode == item.$1, onSelected: (_) => _changeMode(item.$1))))
+        ])),
+        Expanded(child: ListView(padding: const EdgeInsets.all(16), children: [
+          Text(title, style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 6),
+          Text(mode == 'image' ? 'Describe the image you want GG to create.' : mode == 'video' ? 'Describe the video you want GG to create.' : mode == 'music' ? 'Describe the song, vocals or instrumental you want.' : 'Get answers, create, summarize and more.'),
+          const SizedBox(height: 18),
+          if (mode != 'chat') _modelPicker(),
+          if (mode != 'chat') const SizedBox(height: 14),
+          TextField(controller: prompt, minLines: 5, maxLines: 9, textInputAction: TextInputAction.newline, decoration: InputDecoration(hintText: mode == 'image' ? 'A cinematic Nigerian city at night…' : mode == 'video' ? 'A futuristic city flying through clouds…' : mode == 'music' ? 'Afro-fusion song about ambition…' : 'Ask GG AI anything…', border: const OutlineInputBorder(), prefixIcon: const Padding(padding: EdgeInsets.only(bottom: 70), child: Icon(Icons.auto_awesome)))),
+          const SizedBox(height: 14),
+          SizedBox(height: 54, child: FilledButton.icon(onPressed: loading ? null : _generate, icon: loading ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.auto_awesome), label: Text(loading ? status : mode == 'chat' ? 'Ask GG AI' : 'Generate ${mode[0].toUpperCase()}${mode.substring(1)}'))),
+          if (status.isNotEmpty && !loading) Padding(padding: const EdgeInsets.only(top: 10), child: Center(child: Text(status))),
+          const SizedBox(height: 18),
+          _result(),
+        ])),
+      ])),
     );
   }
 }
