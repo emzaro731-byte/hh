@@ -1,6 +1,6 @@
 {
   "name": "gg-messenger-native",
-  "version": "1.4.2",
+  "version": "1.4.3",
   "private": true,
   "scripts": {
     "android": "react-native run-android",
@@ -8,7 +8,7 @@
     "lint": "eslint .",
     "start": "react-native start",
     "test": "jest",
-    "postinstall": "node scripts/migrate-document-picker.js"
+    "postinstall": "node scripts/migrate-document-picker.js && node scripts/enable-voice.js"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "^2.2.0",
@@ -25,7 +25,9 @@
     "react-native-svg": "^15.15.5",
     "react-native-qrcode-svg": "^6.3.24",
     "react-native-url-polyfill": "^2.0.0",
-    "react-native-webrtc": "^124.0.8"
+    "react-native-webrtc": "^124.0.8",
+    "react-native-nitro-modules": "^0.37.1",
+    "react-native-nitro-sound": "^0.2.20"
   },
   "devDependencies": {
     "@react-native-community/cli": "20.0.2",
