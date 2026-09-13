@@ -74,11 +74,20 @@ class _AuthGateState extends State<AuthGate> {
 class ConfigErrorApp extends StatelessWidget {
   const ConfigErrorApp({super.key});
   @override
-  Widget build(BuildContext context) => MaterialApp(
+  Widget build(BuildContext context) => const MaterialApp(
     debugShowCheckedModeBanner: false,
     home: Scaffold(
-      backgroundColor: const Color(0xFF070A10),
-      body: const Center(child: Padding(padding: EdgeInsets.all(24), child: Text('VEYLORA AI is missing Supabase configuration. Build with SUPABASE_URL and SUPABASE_ANON_KEY.', textAlign: TextAlign.center, style: TextStyle(fontSize: 17)))),
+      backgroundColor: Color(0xFF070A10),
+      body: Center(
+        child: Padding(
+          padding: EdgeInsets.all(24),
+          child: Text(
+            'VEYLORA AI is missing Supabase configuration. Build with SUPABASE_URL and SUPABASE_ANON_KEY.',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 17),
+          ),
+        ),
+      ),
     ),
   );
 }
