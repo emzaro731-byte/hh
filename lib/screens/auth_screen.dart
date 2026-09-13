@@ -31,7 +31,7 @@ class _AuthScreenState extends State<AuthScreen> {
   Future<void> _submit() async {
     final email = _email.text.trim();
     final password = _password.text;
-    if (email.isEmpty || (! _forgot && password.length < 6)) {
+    if (email.isEmpty || (!_forgot && password.length < 6)) {
       _message('Enter a valid email and a password of at least 6 characters.');
       return;
     }
@@ -61,22 +61,6 @@ class _AuthScreenState extends State<AuthScreen> {
       _message(e.message);
     } catch (e) {
       _message('Authentication failed: $e');
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  Future<void> _google() async {
-    setState(() => _busy = true);
-    try {
-      await _supabase.auth.signInWithOAuth(
-        OAuthProvider.google,
-        redirectTo: _redirectUrl,
-      );
-    } on AuthException catch (e) {
-      _message(e.message);
-    } catch (e) {
-      _message('Google sign-in failed: $e');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -117,20 +101,6 @@ class _AuthScreenState extends State<AuthScreen> {
                   const SizedBox(height: 6),
                   Text(title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
                   const SizedBox(height: 26),
-                  if (!_forgot) ...[
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton.icon(
-                        onPressed: _busy ? null : _google,
-                        icon: const Icon(Icons.account_circle_outlined),
-                        label: const Text('Continue with Google'),
-                        style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 15), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
-                      ),
-                    ),
-                    const SizedBox(height: 18),
-                    const Row(children: [Expanded(child: Divider()), Padding(padding: EdgeInsets.symmetric(horizontal: 12), child: Text('or', style: TextStyle(color: Colors.white54))), Expanded(child: Divider())]),
-                    const SizedBox(height: 18),
-                  ],
                   _field(_email, 'Email address', Icons.email_outlined, false),
                   if (!_forgot) ...[
                     const SizedBox(height: 12),
