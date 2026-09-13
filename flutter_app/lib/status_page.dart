@@ -456,6 +456,7 @@ class _StatusViewer extends StatefulWidget {
 }
 
 class _StatusViewerState extends State<_StatusViewer> {
+  void snack(String message) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   late int i;
   Timer? timer;
   double progress = 0;
