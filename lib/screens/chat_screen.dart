@@ -20,7 +20,7 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _busy = false;
   bool _menuOpen = false;
   String _tool = 'Chat';
-  String _model = 'Llama 3.3 70B';
+  String _model = 'GPT-OSS 120B';
   String _mode = 'Fast';
 
   final _tools = const [
@@ -31,12 +31,11 @@ class _ChatScreenState extends State<ChatScreen> {
   ];
 
   final _models = const [
-    {'name': 'Llama 3.3 70B', 'desc': 'Powerful & reliable', 'model': 'llama-3.3-70b-versatile'},
-    {'name': 'Llama 3.1 8B', 'desc': 'Fast responses', 'model': 'llama-3.1-8b-instant'},
-    {'name': 'Mixtral', 'desc': 'Great for writing', 'model': 'mixtral-8x7b-32768'},
-    {'name': 'Gemma', 'desc': 'Lightweight & quick', 'model': 'gemma2-9b-it'},
+    {'name': 'GPT-OSS 120B', 'desc': 'Advanced reasoning', 'model': 'openai/gpt-oss-120b'},
+    {'name': 'GPT-OSS 20B', 'desc': 'Very fast', 'model': 'openai/gpt-oss-20b'},
+    {'name': 'Qwen 3.6 27B', 'desc': 'Strong all-rounder', 'model': 'qwen/qwen3.6-27b'},
+    {'name': 'Compound', 'desc': 'AI system with tools', 'model': 'groq/compound'},
   ];
-
   String get _modelId => _models.firstWhere((m) => m['name'] == _model)['model']!;
 
   @override
@@ -54,21 +53,14 @@ class _ChatScreenState extends State<ChatScreen> {
     _controller.clear();
     if (_tool == 'Image') return _media(false, text);
     if (_tool == 'Video') return _media(true, text);
-    if (_tool == 'Music') {
-      _controller.text = text;
-      setState(() => _tool = 'Chat');
-      return _sendMusic(text);
-    }
+    if (_tool == 'Music') return _sendMusic(text);
     setState(() { _messages.add({'role': 'user', 'content': text, 'id': _uuid.v4()}); _busy = true; });
     await _save();
     try {
       final prompt = _mode == 'Fast' ? text : '$_mode mode: $text';
       final history = [..._messages];
       history[history.length - 1] = {'role': 'user', 'content': prompt};
-      final reply = await _ai.chat(
-        messages: history.map((m) => {'role': m['role']!, 'content': m['content']!}).toList(),
-        model: _modelId,
-      );
+      final reply = await _ai.chat(messages: history.map((m) => {'role': m['role']!, 'content': m['content']!}).toList(), model: _modelId);
       setState(() => _messages.add({'role': 'assistant', 'content': reply, 'id': _uuid.v4()}));
       await _save();
     } catch (e) { _error(e); }
@@ -79,7 +71,7 @@ class _ChatScreenState extends State<ChatScreen> {
     setState(() { _messages.add({'role': 'user', 'content': 'Create music: $prompt', 'id': _uuid.v4()}); _busy = true; });
     try {
       final reply = await _ai.chat(messages: [
-        {'role': 'system', 'content': 'You are VEYLORA Music Studio. Write a complete original song concept with title, genre, BPM, structure, lyrics and production direction. Do not copy existing lyrics.'},
+        {'role': 'system', 'content': 'You are VEYLORA Music Studio. Write a complete original song concept with title, genre, BPM, structure, lyrics and production direction. Never copy existing lyrics.'},
         {'role': 'user', 'content': prompt},
       ], model: _modelId);
       setState(() => _messages.add({'role': 'assistant', 'content': '🎵 MUSIC BLUEPRINT\n\n$reply', 'id': _uuid.v4()}));
@@ -122,7 +114,7 @@ class _ChatScreenState extends State<ChatScreen> {
     Row(children: [
       IconButton(onPressed: () => setState(() => _menuOpen = !_menuOpen), icon: const Icon(Icons.menu_rounded, size: 31)),
       const Spacer(),
-      const Column(children: [Text('VEYLORA AI', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, letterSpacing: .4)), Text('One AI • Infinite Possibilities', style: TextStyle(fontSize: 10, color: Colors.white54))]),
+      const Column(children: [Text('VEYLORA AI', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900)), Text('One AI • Infinite Possibilities', style: TextStyle(fontSize: 10, color: Colors.white54))]),
       const Spacer(),
       Container(padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 8), decoration: BoxDecoration(borderRadius: BorderRadius.circular(22), border: Border.all(color: const Color(0xFF6D7CFF))), child: const Row(children: [Icon(Icons.workspace_premium, size: 16), SizedBox(width: 5), Text('Pro', style: TextStyle(fontWeight: FontWeight.bold))])),
     ]),
@@ -145,14 +137,14 @@ class _ChatScreenState extends State<ChatScreen> {
     ]),
   ]));
 
-  Widget _toolCard(Map<String, Object> t) => GestureDetector(onTap: () => setState(() => _tool = t['name'] as String), child: Container(padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 5), decoration: BoxDecoration(color: const Color(0xFF101621), borderRadius: BorderRadius.circular(18), border: Border.all(color: _tool == t['name'] ? const Color(0xFF4C8DFF) : const Color(0xFF242B3A))), child: Column(children: [Icon(t['icon'] as IconData, size: 28, color: const Color(0xFF6F9DFF)), const SizedBox(height: 7), Text(t['name'] as String, style: const TextStyle(fontWeight: FontWeight.w800)), Text(t['hint'] as String, textAlign: TextAlign.center, style: const TextStyle(fontSize: 9, color: Colors.white54))])));
+  Widget _toolCard(Map<String, Object> t) => GestureDetector(onTap: () => setState(() => _tool = t['name'] as String), child: Container(padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 4), decoration: BoxDecoration(color: const Color(0xFF101621), borderRadius: BorderRadius.circular(18), border: Border.all(color: _tool == t['name'] ? const Color(0xFF4C8DFF) : const Color(0xFF242B3A))), child: Column(children: [Icon(t['icon'] as IconData, size: 28, color: const Color(0xFF6F9DFF)), const SizedBox(height: 7), Text(t['name'] as String, style: const TextStyle(fontWeight: FontWeight.w800)), Text(t['hint'] as String, textAlign: TextAlign.center, style: const TextStyle(fontSize: 9, color: Colors.white54))])));
   Widget _idea(String label, IconData icon, String text) => ActionChip(avatar: Icon(icon, size: 18), label: Text(label), onPressed: () => _quick(text));
 
   Widget _bubble(Map<String, String> m) { final user = m['role'] == 'user'; return Padding(padding: const EdgeInsets.only(bottom: 12), child: Row(crossAxisAlignment: CrossAxisAlignment.end, mainAxisAlignment: user ? MainAxisAlignment.end : MainAxisAlignment.start, children: [if (!user) const Padding(padding: EdgeInsets.only(right: 8), child: CircleAvatar(radius: 15, backgroundColor: Color(0xFF222947), child: Icon(Icons.auto_awesome, size: 15, color: Color(0xFF9C83FF))), Flexible(child: GestureDetector(onLongPress: () { Clipboard.setData(ClipboardData(text: m['content'] ?? '')); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Copied to clipboard'), behavior: SnackBarBehavior.floating)); }, child: Container(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13), decoration: BoxDecoration(color: user ? const Color(0xFF4B3BB2) : const Color(0xFF141925), borderRadius: BorderRadius.circular(20).copyWith(bottomRight: user ? const Radius.circular(5) : null, bottomLeft: user ? null : const Radius.circular(5))), child: Text(m['content'] ?? '', style: const TextStyle(fontSize: 15.5, height: 1.45)))))])); }
 
   Widget _composer() => SafeArea(child: Padding(padding: const EdgeInsets.fromLTRB(12, 4, 12, 10), child: Container(padding: const EdgeInsets.fromLTRB(14, 10, 10, 9), decoration: BoxDecoration(color: const Color(0xFF121722), borderRadius: BorderRadius.circular(27), border: Border.all(color: const Color(0xFF303848))), child: Column(children: [TextField(controller: _controller, maxLines: 4, minLines: 1, decoration: const InputDecoration(hintText: 'Ask anything…', border: InputBorder.none, isDense: true)), const SizedBox(height: 7), Row(children: [IconButton(onPressed: () {}, icon: const Icon(Icons.add_circle_outline, size: 28)), _selector(_mode, Icons.bolt, true, _showModes), _selector(_model, Icons.auto_awesome, false, _showModels), IconButton(onPressed: () {}, icon: const Icon(Icons.mic_none_rounded, size: 25)), const Spacer(), GestureDetector(onTap: _busy ? null : _send, child: Container(padding: const EdgeInsets.symmetric(horizontal: 19, vertical: 13), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(23)), child: const Row(children: [Icon(Icons.graphic_eq, color: Colors.black), SizedBox(width: 6), Text('Speak', style: TextStyle(color: Colors.black, fontWeight: FontWeight.w800))])))])] )));
 
-  Widget _selector(String text, IconData icon, bool green, VoidCallback tap) => GestureDetector(onTap: tap, child: Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10), decoration: BoxDecoration(borderRadius: BorderRadius.circular(22), border: Border.all(color: green ? const Color(0xFF596277) : const Color(0xFF22E878), width: green ? 1 : 1.5)), child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(icon, size: 18), const SizedBox(width: 5), ConstrainedBox(constraints: const BoxConstraints(maxWidth: 112), child: Text(text, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700))), const Icon(Icons.keyboard_arrow_down, size: 18)])));
+  Widget _selector(String text, IconData icon, bool green, VoidCallback tap) => GestureDetector(onTap: tap, child: Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10), decoration: BoxDecoration(borderRadius: BorderRadius.circular(22), border: Border.all(color: green ? const Color(0xFF596277) : const Color(0xFF22E878), width: green ? 1 : 1.5)), child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(icon, size: 18), const SizedBox(width: 5), ConstrainedBox(constraints: const BoxConstraints(maxWidth: 105), child: Text(text, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700))), const Icon(Icons.keyboard_arrow_down, size: 18)])));
 
   void _showModes() { showModalBottomSheet(context: context, backgroundColor: const Color(0xFF121722), shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(28))), builder: (_) => Padding(padding: const EdgeInsets.all(20), child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [const Text('Choose tool', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900)), const SizedBox(height: 14), ..._tools.map((t) => ListTile(leading: Icon(t['icon'] as IconData), title: Text(t['name'] as String, style: const TextStyle(fontWeight: FontWeight.w700)), subtitle: Text(t['hint'] as String), trailing: _tool == t['name'] ? const Icon(Icons.check, color: Color(0xFF22E878)) : null, onTap: () { setState(() => _tool = t['name'] as String); Navigator.pop(context); }))]))); }
 
