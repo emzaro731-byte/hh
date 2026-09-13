@@ -1,17 +1,33 @@
 import {supabase} from './supabase';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export type Conversation={id:string;name:string;message:string;time:string;online?:boolean;unread?:number};
 export type UserProfile={id:string;display_name:string;username:string|null;last_seen:string|null;kind?:'user'|'group'};
 
-export async function loadConversations():Promise<Conversation[]>{const {data:{user},error:u}=await supabase.auth.getUser();if(u)throw u;if(!user)return[];const {data:members,error:m}=await supabase.from('conversation_members').select('conversation_id').eq('user_id',user.id);if(m)throw m;const result:Conversation[]=[];for(const row of members??[]){const {data:c}=await supabase.from('conversations').select('id,title,is_group,created_at').eq('id',row.conversation_id).maybeSingle();if(!c)continue;const {data:others}=await supabase.from('conversation_members').select('user_id').eq('conversation_id',c.id).neq('user_id',user.id).limit(1);const otherId=others?.[0]?.user_id;const profile=otherId?(await supabase.from('profiles').select('display_name,last_seen').eq('id',otherId).maybeSingle()).data:null;const last=(await supabase.from('messages').select('body,created_at').eq('conversation_id',c.id).order('created_at',{ascending:false}).limit(1).maybeSingle()).data;result.push({id:c.id,name:c.is_group?(c.title||'Group'):(profile?.display_name||'GG User'),message:last?.body||'No messages yet',time:last?.created_at?new Date(last.created_at).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):'',online:!!profile?.last_seen&&Date.now()-new Date(profile.last_seen).getTime()<120000});}return result.sort((a,b)=>b.time.localeCompare(a.time));}
+const CACHE_PREFIX='gg:offline:conversations:';
 
-export async function ensureProfile(displayName:string){const {data:{user}}=await supabase.auth.getUser();if(!user)return;const {error}=await supabase.from('profiles').upsert({id:user.id,display_name:displayName.trim()||'GG User'},{onConflict:'id'});if(error)throw error;}
+async function getCachedConversations(userId:string):Promise<Conversation[]>{try{const raw=await AsyncStorage.getItem(CACHE_PREFIX+userId);return raw?JSON.parse(raw):[]}catch{return[]}}
+async function saveCachedConversations(userId:string,data:Conversation[]){try{await AsyncStorage.setItem(CACHE_PREFIX+userId,JSON.stringify(data))}catch{}}
 
-export async function searchUsers(query:string){const {data:{user},error:u}=await supabase.auth.getUser();if(u)throw u;if(!user)return[];const q=query.trim();if(!q)return[];
- if(/^group:/i.test(q)){
-  const names=q.slice(6).split(',').map(x=>x.trim()).filter(Boolean);if(!names.length)return[];
-  const parts=names.map(x=>`display_name.ilike.%${x}%,username.ilike.%${x}%`);const {data,error}=await supabase.from('profiles').select('id,display_name,username,last_seen').neq('id',user.id).or(parts.join(',')).limit(20);if(error)throw error;const ids=(data??[]).map(x=>x.id);if(!ids.length)return[];return[{id:`__gg_group__:${ids.join(',')}`,display_name:`Create group: ${(data??[]).map(x=>x.display_name).join(', ')}`,username:'group',last_seen:null,kind:'group'}];
- }
+export async function loadConversations():Promise<Conversation[]>{
+ const {data:{session}}=await supabase.auth.getSession();
+ const user=session?.user;
+ if(!user)return[];
+ const cached=await getCachedConversations(user.id);
+ try{
+  const {data:members,error:m}=await supabase.from('conversation_members').select('conversation_id').eq('user_id',user.id);if(m)throw m;
+  const result:Conversation[]=[];
+  for(const row of members??[]){const {data:c}=await supabase.from('conversations').select('id,title,is_group,created_at').eq('id',row.conversation_id).maybeSingle();if(!c)continue;const {data:others}=await supabase.from('conversation_members').select('user_id').eq('conversation_id',c.id).neq('user_id',user.id).limit(1);const otherId=others?.[0]?.user_id;const profile=otherId?(await supabase.from('profiles').select('display_name,last_seen').eq('id',otherId).maybeSingle()).data:null;const last=(await supabase.from('messages').select('body,created_at').eq('conversation_id',c.id).order('created_at',{ascending:false}).limit(1).maybeSingle()).data;result.push({id:c.id,name:c.is_group?(c.title||'Group'):(profile?.display_name||'GG User'),message:last?.body||'No messages yet',time:last?.created_at?new Date(last.created_at).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):'',online:!!profile?.last_seen&&Date.now()-new Date(profile.last_seen).getTime()<120000});}
+  const fresh=result.sort((a,b)=>b.time.localeCompare(a.time));
+  await saveCachedConversations(user.id,fresh);
+  return fresh.length?fresh:cached;
+ }catch(error){if(cached.length)return cached;throw error;}
+}
+
+export async function ensureProfile(displayName:string){const {data:{user},error}=await supabase.auth.getUser();if(error)throw error;if(!user)return;const {error:e}=await supabase.from('profiles').upsert({id:user.id,display_name:displayName.trim()||'GG User'},{onConflict:'id'});if(e)throw e;}
+
+export async function searchUsers(query:string){const {data:{session},error:u}=await supabase.auth.getSession();if(u)throw u;const user=session?.user;if(!user)return[];const q=query.trim();if(!q)return[];
+ if(/^group:/i.test(q)){const names=q.slice(6).split(',').map(x=>x.trim()).filter(Boolean);if(!names.length)return[];const parts=names.map(x=>`display_name.ilike.%${x}%,username.ilike.%${x}%`);const {data,error}=await supabase.from('profiles').select('id,display_name,username,last_seen').neq('id',user.id).or(parts.join(',')).limit(20);if(error)throw error;const ids=(data??[]).map(x=>x.id);if(!ids.length)return[];return[{id:`__gg_group__:${ids.join(',')}`,display_name:`Create group: ${(data??[]).map(x=>x.display_name).join(', ')}`,username:'group',last_seen:null,kind:'group'}];}
  const {data,error}=await supabase.from('profiles').select('id,display_name,username,last_seen').neq('id',user.id).or(`display_name.ilike.%${q}%,username.ilike.%${q}%`).limit(20);if(error)throw error;return(data??[]) as UserProfile[];
 }
 
