@@ -1,0 +1,46 @@
+name: Fix Status Viewer snack
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Patch status viewer
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('flutter_app/lib/status_page.dart')
+          text = p.read_text()
+          marker = "class _StatusViewerState extends State<_StatusViewer> {"
+          if marker not in text:
+              raise SystemExit('StatusViewerState marker not found')
+          if "void snack(String message) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));" in text:
+              print('snack helper already present')
+          else:
+              text = text.replace(marker, marker + "\n  void snack(String message) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));", 1)
+              p.write_text(text)
+              print('Added snack helper to _StatusViewerState')
+          PY
+
+      - name: Commit fix and remove temporary workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/fix-status-snack.yml
+          git add flutter_app/lib/status_page.dart
+          if git diff --cached --quiet; then
+            echo "No changes needed."
+            exit 0
+          fi
+          git commit -m "Fix status viewer snack helper"
+          git push
