@@ -2,43 +2,39 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 class AiService {
-  static const groqKey = String.fromEnvironment('GROQ_API_KEY');
-  static const groqEndpoint = 'https://api.groq.com/openai/v1/chat/completions';
+  static const supabaseUrl = String.fromEnvironment('SUPABASE_URL');
+  static const anonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
   const AiService();
 
+  Map<String, String> get _headers => {
+    'Content-Type': 'application/json',
+    'apikey': anonKey,
+    'Authorization': 'Bearer $anonKey',
+  };
+
+  Uri _fn(String name) {
+    if (supabaseUrl.isEmpty) throw Exception('SUPABASE_URL is not configured.');
+    return Uri.parse('${supabaseUrl.replaceAll(RegExp(r'/$'), '')}/functions/v1/$name');
+  }
+
   Future<String> chat({required List<Map<String, String>> messages}) async {
-    if (groqKey.isEmpty) throw Exception('GROQ_API_KEY is not configured.');
-    final response = await http.post(
-      Uri.parse(groqEndpoint),
-      headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $groqKey'},
-      body: jsonEncode({'model':'llama-3.3-70b-versatile','messages':messages,'temperature':0.7}),
-    ).timeout(const Duration(seconds:60));
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception('Groq error ${response.statusCode}: ${response.body}');
-    }
-    final data=jsonDecode(response.body);
+    final response = await http.post(_fn('chat'), headers: _headers, body: jsonEncode({'messages': messages})).timeout(const Duration(seconds: 90));
+    if (response.statusCode < 200 || response.statusCode >= 300) throw Exception('VEYLORA chat error ${response.statusCode}: ${response.body}');
+    final data = jsonDecode(response.body);
     return (data['choices']?[0]?['message']?['content'] ?? '').toString();
   }
-}
 
-class KieService {
-  static const key = String.fromEnvironment('KIE_API_KEY');
-  static const base = 'https://api.kie.ai';
-  const KieService();
-
-  Future<String> generateVideo(String prompt) async {
-    if (key.isEmpty) throw Exception('KIE_API_KEY is not configured.');
-    final r=await http.post(Uri.parse('$base/api/v1/runway/generate'),headers:_headers(),body:jsonEncode({'prompt':prompt,'duration':5,'quality':'720p','aspectRatio':'16:9'}));
-    if(r.statusCode<200||r.statusCode>=300) throw Exception('KIE video error ${r.statusCode}: ${r.body}');
-    final d=jsonDecode(r.body); return 'Video task created: ${d['data']?['taskId'] ?? 'unknown'}';
+  Future<String> generateImage(String prompt, {String size = '1:1'}) async {
+    final response = await http.post(_fn('generate-image'), headers: _headers, body: jsonEncode({'prompt': prompt, 'size': size, 'nVariants': 1, 'isEnhance': true})).timeout(const Duration(seconds: 60));
+    if (response.statusCode < 200 || response.statusCode >= 300) throw Exception('KIE image error ${response.statusCode}: ${response.body}');
+    final data = jsonDecode(response.body);
+    return (data['data']?['taskId'] ?? '').toString();
   }
 
-  Future<String> generateImage(String prompt) async {
-    if (key.isEmpty) throw Exception('KIE_API_KEY is not configured.');
-    final r=await http.post(Uri.parse('$base/api/v1/4o-image/generate'),headers:_headers(),body:jsonEncode({'prompt':prompt}));
-    if(r.statusCode<200||r.statusCode>=300) throw Exception('KIE image error ${r.statusCode}: ${r.body}');
-    final d=jsonDecode(r.body); return 'Image task created: ${d['data']?['taskId'] ?? 'unknown'}';
+  Future<String> generateVideo(String prompt, {String ratio = '16:9'}) async {
+    final response = await http.post(_fn('generate-video'), headers: _headers, body: jsonEncode({'prompt': prompt, 'ratio': ratio, 'duration': 5, 'resolution': '1080p'})).timeout(const Duration(seconds: 60));
+    if (response.statusCode < 200 || response.statusCode >= 300) throw Exception('KIE video error ${response.statusCode}: ${response.body}');
+    final data = jsonDecode(response.body);
+    return (data['data']?['taskId'] ?? '').toString();
   }
-
-  Map<String,String> _headers()=>{'Content-Type':'application/json','Authorization':'Bearer $key'};
 }
