@@ -3,17 +3,24 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
           flutter-version: '3.24.5'
+
       - name: Generate Android project files
         run: flutter create --platforms=android --project-name=veylora_ai .
+
+      - name: Remove generated sample test
+        run: rm -f test/widget_test.dart
+
       - name: Configure VEYLORA auth deep link
         run: |
           python3 - <<'PY'
@@ -26,15 +33,20 @@ jobs:
                     <category android:name="android.intent.category.BROWSABLE" />
                     <data android:scheme="veylora" android:host="auth-callback" />
                 </intent-filter>\n'''
-          s = s.replace('</activity>', marker + '        </activity>', 1)
+          if 'android:scheme="veylora"' not in s:
+              s = s.replace('</activity>', marker + '        </activity>', 1)
           p.write_text(s)
           PY
+
       - name: Install dependencies
         run: flutter pub get
+
       - name: Analyze
         run: flutter analyze
+
       - name: Build APK
         run: flutter build apk --release --dart-define=SUPABASE_URL="${{ secrets.SUPABASE_URL }}" --dart-define=SUPABASE_ANON_KEY="${{ secrets.SUPABASE_ANON_KEY }}"
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
