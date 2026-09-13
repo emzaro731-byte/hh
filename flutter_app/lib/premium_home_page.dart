@@ -168,33 +168,31 @@ class _PremiumHomePageState extends State<PremiumHomePage> {
             const SizedBox(width: 8),
           ],
         ),
-        body: RefreshIndicator(
-          onRefresh: _refresh,
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 100),
-            children: [
-              TextField(
-                controller: search,
-                onChanged: (_) => setState(() {}),
-                decoration: InputDecoration(
-                  hintText: 'Search messages',
-                  prefixIcon: const Icon(Icons.search_rounded),
-                  suffixIcon: search.text.isNotEmpty ? IconButton(onPressed: () { search.clear(); setState(() {}); }, icon: const Icon(Icons.close)) : null,
-                  filled: true,
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(22), borderSide: BorderSide.none),
-                ),
+        body: ListView(
+          physics: const ClampingScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 100),
+          children: [
+            TextField(
+              controller: search,
+              onChanged: (_) => setState(() {}),
+              decoration: InputDecoration(
+                hintText: 'Search messages',
+                prefixIcon: const Icon(Icons.search_rounded),
+                suffixIcon: search.text.isNotEmpty ? IconButton(onPressed: () { search.clear(); setState(() {}); }, icon: const Icon(Icons.close)) : null,
+                filled: true,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(22), borderSide: BorderSide.none),
               ),
-              const SizedBox(height: 18),
-              Row(children: [const Text('Recent chats', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w900)), const Spacer(), Text('${filtered.length}', style: TextStyle(color: cs.onSurfaceVariant))]),
-              const SizedBox(height: 8),
-              if (loading)
-                const Padding(padding: EdgeInsets.all(48), child: Center(child: CircularProgressIndicator()))
-              else if (filtered.isEmpty)
-                Center(child: Padding(padding: const EdgeInsets.only(top: 70), child: Column(children: [Icon(Icons.forum_outlined, size: 58, color: cs.onSurfaceVariant), const SizedBox(height: 12), const Text('No conversations yet', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)), const SizedBox(height: 8), FilledButton.icon(onPressed: _newChat, icon: const Icon(Icons.add), label: const Text('Start a chat'))]))
-              else
-                ...[for (final chat in filtered) _chatTile(chat, cs)],
-            ],
-          ),
+            ),
+            const SizedBox(height: 18),
+            Row(children: [const Text('Recent chats', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w900)), const Spacer(), Text('${filtered.length}', style: TextStyle(color: cs.onSurfaceVariant))]),
+            const SizedBox(height: 8),
+            if (loading)
+              const Padding(padding: EdgeInsets.all(48), child: Center(child: CircularProgressIndicator()))
+            else if (filtered.isEmpty)
+              Center(child: Padding(padding: const EdgeInsets.only(top: 70), child: Column(children: [Icon(Icons.forum_outlined, size: 58, color: cs.onSurfaceVariant), const SizedBox(height: 12), const Text('No conversations yet', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)), const SizedBox(height: 8), FilledButton.icon(onPressed: _newChat, icon: const Icon(Icons.add), label: const Text('Start a chat'))]))
+            else
+              ...[for (final chat in filtered) _chatTile(chat, cs)],
+          ],
         ),
         floatingActionButton: FloatingActionButton.extended(onPressed: _newChat, icon: const Icon(Icons.edit_rounded), label: const Text('New chat')),
       ),
