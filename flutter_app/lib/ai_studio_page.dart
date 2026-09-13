@@ -1,7 +1,15 @@
 import 'package:flutter/material.dart';
 
+// KIE-supported free/trial image model.
+const List<Map<String, String>> kieFreeImageModels = [
+  {
+    'id': 'z-image',
+    'name': 'Z-Image Turbo',
+    'description': 'Fast KIE image model for free/trial mode',
+  },
+];
+
 // KIE-supported video models used by the AI Studio video picker.
-// Keep model IDs aligned with the KIE backend/Edge Function.
 const List<Map<String, String>> kieFreeVideoModels = [
   {
     'id': 'wan/2-2-a14b-turbo',
@@ -33,6 +41,7 @@ class AIStudioPage extends StatefulWidget {
 
 class _AIStudioPageState extends State<AIStudioPage> {
   String mode = 'chat';
+  String selectedImageModel = kieFreeImageModels.first['id']!;
   String selectedVideoModel = kieFreeVideoModels.first['id']!;
 
   @override
@@ -42,6 +51,26 @@ class _AIStudioPageState extends State<AIStudioPage> {
       body: Column(
         children: [
           const SizedBox(height: 12),
+          if (mode == 'image')
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: DropdownButtonFormField<String>(
+                value: selectedImageModel,
+                decoration: const InputDecoration(
+                  labelText: 'KIE Free / Trial Image Model',
+                  border: OutlineInputBorder(),
+                ),
+                items: kieFreeImageModels
+                    .map((m) => DropdownMenuItem<String>(
+                          value: m['id'],
+                          child: Text(m['name']!),
+                        ))
+                    .toList(),
+                onChanged: (v) {
+                  if (v != null) setState(() => selectedImageModel = v);
+                },
+              ),
+            ),
           if (mode == 'video')
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -65,9 +94,11 @@ class _AIStudioPageState extends State<AIStudioPage> {
           Expanded(
             child: Center(
               child: Text(
-                mode == 'video'
-                    ? 'Selected: $selectedVideoModel'
-                    : 'AI Studio',
+                mode == 'image'
+                    ? 'Selected: $selectedImageModel'
+                    : mode == 'video'
+                        ? 'Selected: $selectedVideoModel'
+                        : 'AI Studio',
               ),
             ),
           ),
