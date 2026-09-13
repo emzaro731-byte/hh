@@ -16,6 +16,7 @@ class HomeDashboard extends StatelessWidget {
     await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       builder: (_) => const _Settings(),
     );
   }
@@ -37,77 +38,10 @@ class HomeDashboard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('GG Messenger', style: TextStyle(fontWeight: FontWeight.w800)),
-        leading: IconButton(
-          icon: const Icon(Icons.person),
-          tooltip: 'Profile',
-          onPressed: () => _open(context, const ProfilePage()),
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.camera_alt_outlined),
-            tooltip: 'GG Status',
-            onPressed: () => _open(context, const StatusPage()),
-          ),
-          IconButton(
-            icon: const Icon(Icons.settings_outlined),
-            onPressed: () => _settings(context),
-          ),
-          PopupMenuButton<String>(
-            onSelected: (value) {
-              switch (value) {
-                case 'profile':
-                  _open(context, const ProfilePage());
-                  break;
-                case 'status':
-                  _open(context, const StatusPage());
-                  break;
-                case 'studio':
-                  _open(context, const AIPage());
-                  break;
-                case 'settings':
-                  _settings(context);
-                  break;
-                case 'logout':
-                  _logout(context);
-                  break;
-              }
-            },
-            itemBuilder: (_) => const [
-              PopupMenuItem(value: 'profile', child: Text('Profile')),
-              PopupMenuItem(value: 'status', child: Text('GG Status')),
-              PopupMenuItem(value: 'studio', child: Text('AI • Image • Video • Music')),
-              PopupMenuItem(value: 'settings', child: Text('Chat settings')),
-              PopupMenuItem(value: 'logout', child: Text('Logout')),
-            ],
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                ActionChip(avatar: const Icon(Icons.camera_alt), label: const Text('Status'), onPressed: () => _open(context, const StatusPage())),
-                ActionChip(avatar: const Icon(Icons.auto_awesome), label: const Text('AI'), onPressed: () => _open(context, const AIPage())),
-                ActionChip(avatar: const Icon(Icons.image), label: const Text('Image'), onPressed: () => _open(context, const AIPage())),
-                ActionChip(avatar: const Icon(Icons.video_library), label: const Text('Video'), onPressed: () => _open(context, const AIPage())),
-                ActionChip(avatar: const Icon(Icons.music_note), label: const Text('Music'), onPressed: () => _open(context, const AIPage())),
-                ActionChip(avatar: const Icon(Icons.person), label: const Text('Profile'), onPressed: () => _open(context, const ProfilePage())),
-                ActionChip(avatar: const Icon(Icons.settings), label: const Text('Settings'), onPressed: () => _settings(context)),
-              ],
-            ),
-          ),
-          const Divider(height: 1),
-          const Expanded(child: OfflineHomePage()),
-        ],
-      ),
-    );
+    // The chat home owns its own premium navigation shell. Keeping one shell
+    // avoids the old nested AppBar/Scaffold layout and gives the messenger a
+    // cleaner, full-screen mobile experience.
+    return const OfflineHomePage();
   }
 }
 
@@ -123,14 +57,16 @@ class _SettingsState extends State<_Settings> {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        const ListTile(title: Text('Chat settings', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800))),
-        SwitchListTile(title: const Text('Notifications'), value: notifications, onChanged: (value) => setState(() => notifications = value)),
-        SwitchListTile(title: const Text('Dark mode'), value: dark, onChanged: (value) => setState(() => dark = value)),
-        const SizedBox(height: 12),
-      ],
+    return SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const ListTile(title: Text('Chat settings', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800))),
+          SwitchListTile(title: const Text('Notifications'), value: notifications, onChanged: (value) => setState(() => notifications = value)),
+          SwitchListTile(title: const Text('Dark mode'), value: dark, onChanged: (value) => setState(() => dark = value)),
+          const SizedBox(height: 12),
+        ],
+      ),
     );
   }
 }
