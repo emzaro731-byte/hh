@@ -8,7 +8,6 @@ import 'services/calls_repository.dart';
 
 class PremiumHomePage extends StatefulWidget {
   const PremiumHomePage({super.key});
-
   @override
   State<PremiumHomePage> createState() => _PremiumHomePageState();
 }
@@ -31,11 +30,7 @@ class _PremiumHomePageState extends State<PremiumHomePage> {
 
   String clock(dynamic value) {
     if (value == null) return '';
-    try {
-      return TimeOfDay.fromDateTime(DateTime.parse(value.toString()).toLocal()).format(context);
-    } catch (_) {
-      return '';
-    }
+    try { return TimeOfDay.fromDateTime(DateTime.parse(value.toString()).toLocal()).format(context); } catch (_) { return ''; }
   }
 
   Future<void> _refresh() async {
@@ -154,63 +149,81 @@ class _PremiumHomePageState extends State<PremiumHomePage> {
 
   @override
   Widget build(BuildContext context) {
-    final cs = dark ? const ColorScheme.dark(primary: Color(0xFFFFC83D), surface: Color(0xFF101114)) : ColorScheme.fromSeed(seedColor: const Color(0xFFFFB800));
+    final cs = dark ? const ColorScheme.dark(primary: Color(0xFFFFC83D), surface: Color(0xFF0B0C0F)) : ColorScheme.fromSeed(seedColor: const Color(0xFFFFB800));
     final filtered = chats.where((c) => c.name.toLowerCase().contains(search.text.toLowerCase()) || c.message.toLowerCase().contains(search.text.toLowerCase())).toList();
     return Theme(
       data: ThemeData(useMaterial3: true, colorScheme: cs, scaffoldBackgroundColor: cs.surface),
       child: Scaffold(
         appBar: AppBar(
-          toolbarHeight: 76,
+          elevation: 0,
+          toolbarHeight: 82,
           titleSpacing: 20,
-          title: const Text('GG', style: TextStyle(fontSize: 26, fontWeight: FontWeight.w900, letterSpacing: -1)),
+          title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Text('GG', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900, letterSpacing: -1.2)),
+            Text('${filtered.length} conversations', style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant, fontWeight: FontWeight.w500)),
+          ]),
           actions: [
-            IconButton(onPressed: () => setState(() => dark = !dark), icon: Icon(dark ? Icons.light_mode_rounded : Icons.dark_mode_rounded)),
-            const SizedBox(width: 8),
+            IconButton(tooltip: 'Change theme', onPressed: () => setState(() => dark = !dark), icon: Icon(dark ? Icons.light_mode_rounded : Icons.dark_mode_rounded)),
+            const SizedBox(width: 10),
           ],
         ),
         body: ListView(
-          physics: const ClampingScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 100),
+          physics: const BouncingScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(16, 2, 16, 110),
           children: [
             TextField(
               controller: search,
               onChanged: (_) => setState(() {}),
+              textInputAction: TextInputAction.search,
               decoration: InputDecoration(
-                hintText: 'Search messages',
+                hintText: 'Search chats',
                 prefixIcon: const Icon(Icons.search_rounded),
-                suffixIcon: search.text.isNotEmpty ? IconButton(onPressed: () { search.clear(); setState(() {}); }, icon: const Icon(Icons.close)) : null,
+                suffixIcon: search.text.isNotEmpty ? IconButton(onPressed: () { search.clear(); setState(() {}); }, icon: const Icon(Icons.close_rounded)) : null,
                 filled: true,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(22), borderSide: BorderSide.none),
+                fillColor: cs.surfaceContainerHighest.withValues(alpha: .62),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none),
+                contentPadding: const EdgeInsets.symmetric(vertical: 15),
               ),
             ),
-            const SizedBox(height: 18),
-            Row(children: [const Text('Recent chats', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w900)), const Spacer(), Text('${filtered.length}', style: TextStyle(color: cs.onSurfaceVariant))]),
-            const SizedBox(height: 8),
+            const SizedBox(height: 22),
+            Row(children: [const Text('Messages', style: TextStyle(fontSize: 21, fontWeight: FontWeight.w900)), const Spacer(), Text('${filtered.length}', style: TextStyle(color: cs.primary, fontWeight: FontWeight.w800))]),
+            const SizedBox(height: 10),
             if (loading)
-              const Padding(padding: EdgeInsets.all(48), child: Center(child: CircularProgressIndicator()))
+              ...List.generate(5, (_) => _skeleton(cs))
             else if (filtered.isEmpty)
-              Center(child: Padding(padding: const EdgeInsets.only(top: 70), child: Column(children: [Icon(Icons.forum_outlined, size: 58, color: cs.onSurfaceVariant), const SizedBox(height: 12), const Text('No conversations yet', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)), const SizedBox(height: 8), FilledButton.icon(onPressed: _newChat, icon: const Icon(Icons.add), label: const Text('Start a chat'))]))
+              Padding(padding: const EdgeInsets.only(top: 80), child: Column(children: [Container(width: 82, height: 82, decoration: BoxDecoration(shape: BoxShape.circle, color: cs.primary.withValues(alpha: .12)), child: Icon(Icons.chat_bubble_outline_rounded, size: 38, color: cs.primary)), const SizedBox(height: 18), const Text('Your inbox is empty', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w800)), const SizedBox(height: 7), Text('Start a private conversation with someone.', textAlign: TextAlign.center, style: TextStyle(color: cs.onSurfaceVariant)), const SizedBox(height: 22), FilledButton.icon(onPressed: _newChat, icon: const Icon(Icons.add_rounded), label: const Text('Start a chat'))]))
             else
               ...[for (final chat in filtered) _chatTile(chat, cs)],
           ],
         ),
-        floatingActionButton: FloatingActionButton.extended(onPressed: _newChat, icon: const Icon(Icons.edit_rounded), label: const Text('New chat')),
+        floatingActionButton: FloatingActionButton.extended(onPressed: _newChat, elevation: 5, icon: const Icon(Icons.edit_rounded), label: const Text('New chat', style: TextStyle(fontWeight: FontWeight.w800))),
       ),
     );
   }
 
-  Widget _chatTile(Conversation chat, ColorScheme cs) => Card(
+  Widget _skeleton(ColorScheme cs) => Container(
+    height: 76,
     margin: const EdgeInsets.symmetric(vertical: 5),
-    elevation: 0,
-    color: cs.surfaceContainerHighest.withValues(alpha: .45),
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-    child: ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
-      leading: CircleAvatar(radius: 27, backgroundColor: cs.primary.withValues(alpha: .18), child: Text(chat.name.isEmpty ? 'G' : chat.name[0].toUpperCase(), style: TextStyle(color: cs.primary, fontWeight: FontWeight.w900))),
-      title: Text(chat.name, style: const TextStyle(fontWeight: FontWeight.w800)),
-      subtitle: Padding(padding: const EdgeInsets.only(top: 4), child: Text(chat.message.isEmpty ? 'Start a conversation' : chat.message, maxLines: 1, overflow: TextOverflow.ellipsis)),
-      trailing: Text(chat.time, style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant)),
-      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => OfflineChatPage(conversation: chat, dark: dark))).then((_) => _refresh()),
+    decoration: BoxDecoration(color: cs.surfaceContainerHighest.withValues(alpha: .35), borderRadius: BorderRadius.circular(20)),
+    child: Row(children: [const SizedBox(width: 14), Container(width: 52, height: 52, decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white10)), const SizedBox(width: 14), Expanded(child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [Container(height: 12, width: 130, decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(8))), const SizedBox(height: 9), Container(height: 10, width: 190, decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(8)))]))]),
+  );
+
+  Widget _chatTile(Conversation chat, ColorScheme cs) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 4),
+    child: Material(
+      color: cs.surfaceContainerHighest.withValues(alpha: .42),
+      borderRadius: BorderRadius.circular(22),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(22),
+        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => OfflineChatPage(conversation: chat, dark: dark))).then((_) => _refresh()),
+        child: Padding(padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11), child: Row(children: [
+          Stack(children: [CircleAvatar(radius: 27, backgroundColor: cs.primary.withValues(alpha: .16), child: Text(chat.name.isEmpty ? 'G' : chat.name[0].toUpperCase(), style: TextStyle(color: cs.primary, fontSize: 18, fontWeight: FontWeight.w900))), Positioned(right: 1, bottom: 1, child: Container(width: 12, height: 12, decoration: BoxDecoration(color: const Color(0xFF32D583), shape: BoxShape.circle, border: Border.all(color: cs.surface, width: 2))))]),
+          const SizedBox(width: 13),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(chat.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)), const SizedBox(height: 5), Text(chat.message.isEmpty ? 'Start a conversation' : chat.message, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant))])),
+          const SizedBox(width: 8),
+          Text(chat.time, style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant, fontWeight: FontWeight.w600)),
+        ])),
+      ),
     ),
   );
 }
