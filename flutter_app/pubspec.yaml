@@ -1,7 +1,7 @@
 name: gg_messenger
 publish_to: 'none'
 description: Flutter version of GG Messenger
-version: 1.0.0+1
+version: 1.2.0+2
 environment:
   sdk: '>=3.4.0 <4.0.0'
 dependencies:
@@ -14,11 +14,14 @@ dependencies:
   flutter_local_notifications: ^18.0.1
   image_picker: ^1.1.2
   file_picker: ^8.1.7
+  record: ^6.1.2
+  just_audio: ^0.10.4
   url_launcher: ^6.3.1
   cupertino_icons: ^1.0.8
   flutter_svg: ^2.0.17
   shared_preferences: ^2.5.3
   video_player: ^2.10.0
+  connectivity_plus: ^6.1.5
 dev_dependencies:
   flutter_test:
     sdk: flutter
