@@ -46,6 +46,49 @@ jobs:
       - name: Analyze
         run: flutter analyze
 
+      - name: Validate Supabase configuration
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "$SUPABASE_URL" ]; then
+            echo "ERROR: GitHub Actions secret SUPABASE_URL is empty or missing."
+            exit 1
+          fi
+
+          if [ -z "$SUPABASE_ANON_KEY" ]; then
+            echo "ERROR: GitHub Actions secret SUPABASE_ANON_KEY is empty or missing."
+            exit 1
+          fi
+
+          case "$SUPABASE_URL" in
+            https://*.supabase.co) ;;
+            *)
+              echo "ERROR: SUPABASE_URL must be the Supabase Project URL, for example https://<project-ref>.supabase.co"
+              exit 1
+              ;;
+          esac
+
+          host="${SUPABASE_URL#https://}"
+          host="${host%%/*}"
+
+          if ! getent hosts "$host" >/dev/null; then
+            echo "ERROR: Supabase hostname does not resolve: $host"
+            echo "Check the SUPABASE_URL GitHub secret against the Project URL in Supabase Dashboard."
+            exit 1
+          fi
+
+          echo "Supabase hostname resolves successfully: $host"
+
+          if ! curl --fail --silent --show-error --max-time 15 "$SUPABASE_URL/auth/v1/settings" >/dev/null; then
+            echo "ERROR: Supabase Auth endpoint is unreachable at $SUPABASE_URL"
+            exit 1
+          fi
+
+          echo "Supabase Auth endpoint is reachable."
+
       - name: Build APK
         run: flutter build apk --release --dart-define=SUPABASE_URL="${{ secrets.SUPABASE_URL }}" --dart-define=SUPABASE_ANON_KEY="${{ secrets.SUPABASE_ANON_KEY }}"
 
