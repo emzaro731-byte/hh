@@ -2,7 +2,7 @@ import 'dart:async';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'ai_page.dart';
+import 'ai_studio_page.dart';
 import 'call_page.dart';
 import 'call_history_page.dart';
 import 'chat_page.dart';
@@ -177,6 +177,10 @@ class _HomePageState extends State<HomePage> {
     controller.dispose();
   }
 
+  void openAIStudio() {
+    Navigator.push(context, MaterialPageRoute(builder: (_) => const AIStudioPage()));
+  }
+
   void profile() {
     showModalBottomSheet<void>(context: context, builder: (_) => SafeArea(child: Wrap(children: [
       ListTile(leading: const Icon(Icons.person), title: const Text('View profile'), subtitle: Text(sb.auth.currentUser?.email ?? 'GG user')),
@@ -215,7 +219,13 @@ class _HomePageState extends State<HomePage> {
             : ListView.builder(itemCount: filtered.length, itemBuilder: (_, i) { final chat = filtered[i]; return ListTile(leading: CircleAvatar(child: Text(chat.name.isEmpty ? 'G' : chat.name[0].toUpperCase())), title: Text(chat.name, style: const TextStyle(fontWeight: FontWeight.w700)), subtitle: Text(chat.message, maxLines: 1, overflow: TextOverflow.ellipsis), trailing: Text(chat.time, style: const TextStyle(fontSize: 11)), onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ChatPage(conversation: chat, dark: dark))).then((_) => refresh())); }),
         ),
       ]),
-      floatingActionButton: FloatingActionButton(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AIPage())), child: const Icon(Icons.auto_awesome)),
+      floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'gg-ai-studio',
+        tooltip: 'Chat with AI',
+        onPressed: openAIStudio,
+        icon: const Icon(Icons.auto_awesome),
+        label: const Text('AI'),
+      ),
     ));
   }
 }
