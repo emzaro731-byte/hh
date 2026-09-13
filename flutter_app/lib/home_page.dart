@@ -30,6 +30,7 @@ class _HomePageState extends State<HomePage> {
   RealtimeChannel? incomingChannel;
   bool dark = false, loading = true;
   String query = '';
+  int selectedTab = 0;
 
   @override
   void initState() {
@@ -87,9 +88,7 @@ class _HomePageState extends State<HomePage> {
       }
       if (mounted) setState(() => chats = result);
       await OfflineStore.saveHome(user.id, result.map((c) => {'id': c.id, 'name': c.name, 'message': c.message, 'time': c.time}).toList());
-    } catch (_) {
-      // Cached conversations remain visible offline.
-    } finally {
+    } catch (_) {} finally {
       if (mounted) setState(() => loading = false);
     }
   }
@@ -192,6 +191,17 @@ class _HomePageState extends State<HomePage> {
 
   void snack(String message) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
 
+  void selectBottomTab(int index) {
+    setState(() => selectedTab = index);
+    if (index == 1) {
+      Navigator.push(context, MaterialPageRoute(builder: (_) => const StatusPage())).then((_) { if (mounted) setState(() => selectedTab = 0); });
+    } else if (index == 2) {
+      Navigator.push(context, MaterialPageRoute(builder: (_) => const CommunityPage())).then((_) { if (mounted) setState(() => selectedTab = 0); });
+    } else if (index == 3) {
+      Navigator.push(context, MaterialPageRoute(builder: (_) => const CallHistoryPage())).then((_) { if (mounted) setState(() => selectedTab = 0); });
+    }
+  }
+
   @override
   void dispose() { connectivity?.cancel(); periodic?.cancel(); if (incomingChannel != null) sb.removeChannel(incomingChannel!); super.dispose(); }
 
@@ -203,9 +213,6 @@ class _HomePageState extends State<HomePage> {
       appBar: AppBar(
         title: const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('GG', style: TextStyle(fontWeight: FontWeight.w900)), Text('Messenger', style: TextStyle(fontSize: 12))]),
         actions: [
-          IconButton(tooltip: 'Communities', onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CommunityPage())), icon: const Icon(Icons.groups_outlined)),
-          IconButton(tooltip: 'Calls', onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CallHistoryPage())), icon: const Icon(Icons.call_outlined)),
-          IconButton(tooltip: 'Status', onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const StatusPage())), icon: const Icon(Icons.camera_alt_outlined)),
           IconButton(tooltip: 'Profile', onPressed: profile, icon: const Icon(Icons.person_outline)),
           IconButton(tooltip: 'New chat', onPressed: newChat, icon: const Icon(Icons.add)),
         ],
@@ -225,6 +232,16 @@ class _HomePageState extends State<HomePage> {
         onPressed: openAIStudio,
         icon: const Icon(Icons.auto_awesome),
         label: const Text('AI'),
+      ),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: selectedTab,
+        onDestinationSelected: selectBottomTab,
+        destinations: const [
+          NavigationDestination(icon: Icon(Icons.chat_bubble_outline), selectedIcon: Icon(Icons.chat_bubble), label: 'Chats'),
+          NavigationDestination(icon: Icon(Icons.campaign_outlined), selectedIcon: Icon(Icons.campaign), label: 'Updates'),
+          NavigationDestination(icon: Icon(Icons.groups_outlined), selectedIcon: Icon(Icons.groups), label: 'Communities'),
+          NavigationDestination(icon: Icon(Icons.call_outlined), selectedIcon: Icon(Icons.call), label: 'Calls'),
+        ],
       ),
     ));
   }
