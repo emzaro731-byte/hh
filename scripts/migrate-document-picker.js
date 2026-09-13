@@ -21,4 +21,10 @@ s = s.replace(
   "if(isErrorWithCode(e)&&e.code===errorCodes.OPERATION_CANCELED)return;"
 );
 
+// Fix invalid await inside the setMessages state updater.
+s = s.replace(
+  "setMessages(v=>[...v,await sendMediaMessage(selected.id,signed.data.signedUrl,'file',r.name||'Document')])",
+  "const message=await sendMediaMessage(selected.id,signed.data.signedUrl,'file',r.name||'Document');setMessages(v=>[...v,message])"
+);
+
 fs.writeFileSync(file, s);
