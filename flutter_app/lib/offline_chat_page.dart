@@ -19,7 +19,10 @@ class _OfflineChatPageState extends State<OfflineChatPage> {
   final input = TextEditingController();
   List<Map<String, dynamic>> messages = [];
   RealtimeChannel? channel;
+  RealtimeChannel? presenceChannel;
   String? uid;
+  String? peerId;
+  bool peerOnline = false;
   bool loading = true;
   bool calling = false;
   bool syncing = false;
@@ -30,9 +33,42 @@ class _OfflineChatPageState extends State<OfflineChatPage> {
     super.initState();
     uid = sb.auth.currentUser?.id;
     load();
-    // Retry the persistent outbox periodically. This also works when the app
-    // returns from offline mode without requiring a manual resend.
     retryTimer = Timer.periodic(const Duration(seconds: 8), (_) => syncOutbox());
+  }
+
+  Future<void> setupPresence() async {
+    if (uid == null) return;
+    try {
+      peerId ??= await peer();
+      final room = 'presence:conversation:${widget.conversation.id}';
+      presenceChannel = sb.channel(room, opts: const RealtimeChannelConfig(self: true));
+      presenceChannel!
+        .onPresenceSync((payload) {
+          final state = presenceChannel!.presenceState();
+          final onlineIds = <String>{};
+          for (final entry in state) {
+            for (final presence in entry.presences) {
+              final id = '${presence.payload['user_id'] ?? presence.payload['uid'] ?? ''}';
+              if (id.isNotEmpty) onlineIds.add(id);
+            }
+          }
+          final online = peerId != null && onlineIds.contains(peerId);
+          if (mounted && peerOnline != online) setState(() => peerOnline = online);
+        })
+        .onPresenceJoin((payload) {
+          final online = payload.newPresences.any((p) => '${p.payload['user_id'] ?? p.payload['uid'] ?? ''}' == peerId);
+          if (online && mounted) setState(() => peerOnline = true);
+        })
+        .onPresenceLeave((payload) {
+          final left = payload.leftPresences.any((p) => '${p.payload['user_id'] ?? p.payload['uid'] ?? ''}' == peerId);
+          if (left && mounted) setState(() => peerOnline = false);
+        })
+        .subscribe((status, error) async {
+          if (status == RealtimeSubscribeStatus.subscribed) {
+            await presenceChannel!.track({'user_id': uid, 'online_at': DateTime.now().toUtc().toIso8601String()});
+          }
+        });
+    } catch (_) {}
   }
 
   Future<void> load() async {
@@ -40,7 +76,6 @@ class _OfflineChatPageState extends State<OfflineChatPage> {
       if (mounted) setState(() => loading = false);
       return;
     }
-
     final cached = await OfflineStore.loadMessages(uid!, widget.conversation.id);
     if (mounted) {
       setState(() {
@@ -48,9 +83,8 @@ class _OfflineChatPageState extends State<OfflineChatPage> {
         loading = false;
       });
     }
-
+    await setupPresence();
     await syncOutbox();
-
     try {
       final data = await sb.from('messages').select('*').eq('conversation_id', widget.conversation.id).order('created_at', ascending: true);
       final remote = List<Map<String, dynamic>>.from(data);
@@ -61,7 +95,6 @@ class _OfflineChatPageState extends State<OfflineChatPage> {
       messages = combined;
       await OfflineStore.saveMessages(uid!, widget.conversation.id, messages);
       if (mounted) setState(() {});
-
       channel = sb.channel('chat:${widget.conversation.id}')
         ..onPostgresChanges(
           event: PostgresChangeEvent.insert,
@@ -78,7 +111,6 @@ class _OfflineChatPageState extends State<OfflineChatPage> {
             }
           },
         ).subscribe();
-
       try {
         await sb.from('messages').update({'read_at': DateTime.now().toUtc().toIso8601String()}).eq('conversation_id', widget.conversation.id).neq('sender_id', uid!).isFilter('read_at', null);
       } catch (_) {}
@@ -102,7 +134,6 @@ class _OfflineChatPageState extends State<OfflineChatPage> {
             'message_type': item['message_type'] ?? 'text',
             'delivered_at': DateTime.now().toUtc().toIso8601String(),
           }).select().single();
-
           await OfflineStore.removeOutbox(uid!, localId);
           final server = Map<String, dynamic>.from(data);
           final index = messages.indexWhere((m) => m['id'] == localId);
@@ -115,7 +146,6 @@ class _OfflineChatPageState extends State<OfflineChatPage> {
           await OfflineStore.saveMessages(uid!, widget.conversation.id, messages);
           if (mounted && '${item['conversation_id']}' == widget.conversation.id) setState(() {});
         } catch (_) {
-          // Still offline/unreachable. Keep it in the outbox for the next retry.
           break;
         }
       }
@@ -191,12 +221,27 @@ class _OfflineChatPageState extends State<OfflineChatPage> {
     await launchUrl(Uri.parse(value.toString()), mode: LaunchMode.externalApplication);
   }
 
+  Widget messageStatus(Map<String, dynamic> message) {
+    if (message['_pending'] == true) {
+      return const Icon(Icons.schedule_rounded, size: 14, color: Colors.white70);
+    }
+    final read = message['read_at'] != null && '${message['read_at']}'.isNotEmpty;
+    if (read) {
+      return const Icon(Icons.done_all_rounded, size: 15, color: Color(0xffffc107));
+    }
+    // Requested GG status behavior:
+    // offline recipient = double grey checks, online recipient = single grey check.
+    if (peerOnline) {
+      return const Icon(Icons.done_rounded, size: 15, color: Colors.white70);
+    }
+    return const Icon(Icons.done_all_rounded, size: 15, color: Colors.white70);
+  }
+
   Widget bubble(Map<String, dynamic> message) {
     final mine = message['sender_id'] == uid;
     final type = '${message['message_type'] ?? 'text'}';
     final url = message['file_url'] ?? message['url'] ?? message['media_url'];
     final offline = message['_offline'] == true;
-    final pending = message['_pending'] == true;
     final foreground = mine ? Colors.white : null;
     return Align(
       alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
@@ -210,7 +255,7 @@ class _OfflineChatPageState extends State<OfflineChatPage> {
           else if (url != null) InkWell(onTap: () => open(url), child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(type.contains('video') ? Icons.play_circle_fill : type.contains('audio') ? Icons.headphones : Icons.insert_drive_file, color: foreground), const SizedBox(width: 8), Flexible(child: Text('${message['file_name'] ?? 'Open attachment'}', style: TextStyle(color: foreground, fontWeight: FontWeight.w600)))])),
           if ((message['body'] ?? '').toString().isNotEmpty && (url == null || type == 'text')) Text('${message['body']}', style: TextStyle(color: foreground, fontSize: 16, height: 1.3)),
           const SizedBox(height: 3),
-          Row(mainAxisSize: MainAxisSize.min, children: [Text(time(message['created_at']), style: TextStyle(color: mine ? Colors.white70 : Colors.grey, fontSize: 10)), if (mine) Padding(padding: const EdgeInsets.only(left: 5), child: Icon(pending ? Icons.schedule : offline ? Icons.cloud_off : Icons.done_all, size: 14, color: Colors.white70))]),
+          Row(mainAxisSize: MainAxisSize.min, children: [Text(time(message['created_at']), style: TextStyle(color: mine ? Colors.white70 : Colors.grey, fontSize: 10)), if (mine) Padding(padding: const EdgeInsets.only(left: 5), child: offline && message['_pending'] == true ? const Icon(Icons.cloud_off_rounded, size: 14, color: Colors.white70) : messageStatus(message))]),
         ]),
       ),
     );
@@ -220,6 +265,7 @@ class _OfflineChatPageState extends State<OfflineChatPage> {
   void dispose() {
     retryTimer?.cancel();
     if (channel != null) sb.removeChannel(channel!);
+    if (presenceChannel != null) sb.removeChannel(presenceChannel!);
     input.dispose();
     super.dispose();
   }
@@ -233,7 +279,7 @@ class _OfflineChatPageState extends State<OfflineChatPage> {
         backgroundColor: widget.dark ? const Color(0xff0f1117) : const Color(0xfff7f8fc),
         appBar: AppBar(
           titleSpacing: 0,
-          title: Row(children: [CircleAvatar(radius: 21, child: Text(widget.conversation.name.isEmpty ? 'G' : widget.conversation.name[0].toUpperCase())), const SizedBox(width: 10), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(widget.conversation.name, style: const TextStyle(fontWeight: FontWeight.w800), overflow: TextOverflow.ellipsis), Text(syncing ? 'Syncing messages…' : 'Secure chat', style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant))]))]),
+          title: Row(children: [CircleAvatar(radius: 21, child: Text(widget.conversation.name.isEmpty ? 'G' : widget.conversation.name[0].toUpperCase())), const SizedBox(width: 10), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(widget.conversation.name, style: const TextStyle(fontWeight: FontWeight.w800), overflow: TextOverflow.ellipsis), Text(syncing ? 'Syncing messages…' : peerOnline ? 'Online' : 'Offline', style: TextStyle(fontSize: 11, color: peerOnline ? const Color(0xff22c55e) : Theme.of(context).colorScheme.onSurfaceVariant))]))]),
           actions: [IconButton(onPressed: calling ? null : () => call(false), icon: const Icon(Icons.call_rounded)), IconButton(onPressed: calling ? null : () => call(true), icon: const Icon(Icons.videocam_rounded)), const SizedBox(width: 4)],
         ),
         body: Column(children: [
