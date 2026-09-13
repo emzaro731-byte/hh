@@ -4,13 +4,14 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'screens/auth_screen.dart';
 import 'screens/chat_screen.dart';
 
-const supabaseUrl = String.fromEnvironment('SUPABASE_URL');
+// Public Supabase project URL. The publishable/anon key remains supplied securely at build time.
+const supabaseUrl = 'https://vihbsfrwnslnmheowkhy.supabase.co';
 const supabasePublishableKey = String.fromEnvironment('SUPABASE_ANON_KEY');
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final prefs = await SharedPreferences.getInstance();
-  if (supabaseUrl.isEmpty || supabasePublishableKey.isEmpty) {
+  if (supabasePublishableKey.isEmpty) {
     runApp(const ConfigErrorApp());
     return;
   }
@@ -82,7 +83,7 @@ class ConfigErrorApp extends StatelessWidget {
         child: Padding(
           padding: EdgeInsets.all(24),
           child: Text(
-            'VEYLORA AI is missing Supabase configuration. Build with SUPABASE_URL and SUPABASE_ANON_KEY.',
+            'VEYLORA AI is missing the Supabase publishable key. Build with SUPABASE_ANON_KEY.',
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 17),
           ),
