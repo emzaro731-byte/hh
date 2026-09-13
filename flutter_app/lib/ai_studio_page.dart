@@ -25,6 +25,19 @@ const List<Map<String, String>> kiePremiumVideoModels = [
   {'id': 'wan/2-7-text-to-video', 'name': 'Wan 2.7', 'description': 'Premium video generation'},
 ];
 
+// KIE documents currently support V6_MINI for music generation.
+const List<Map<String, String>> kieFreeMusicModels = [
+  {'id': 'V6_MINI', 'name': 'Suno V6 Mini', 'description': 'KIE-supported free/trial music model'},
+];
+
+const List<Map<String, String>> kiePremiumMusicModels = [
+  {'id': 'V6', 'name': 'Suno V6', 'description': 'Premium music generation'},
+  {'id': 'V5_5', 'name': 'Suno V5.5', 'description': 'Premium music generation'},
+  {'id': 'V5', 'name': 'Suno V5', 'description': 'Premium music generation'},
+  {'id': 'V4_5ALL', 'name': 'Suno V4.5 All', 'description': 'Premium music generation'},
+  {'id': 'V4_5PLUS', 'name': 'Suno V4.5 Plus', 'description': 'Premium music generation'},
+];
+
 class AIStudioPage extends StatefulWidget {
   const AIStudioPage({super.key});
   @override
@@ -36,15 +49,17 @@ class _AIStudioPageState extends State<AIStudioPage> {
   String plan = 'free';
   String selectedImageModel = 'z-image';
   String selectedVideoModel = 'wan/2-2-a14b-text-to-video-turbo';
+  String selectedMusicModel = 'V6_MINI';
   bool loadingPlan = true;
 
   bool get isPremium => plan == 'go' || plan == 'plus' || plan == 'ultra';
 
   List<Map<String, String>> get imageModels =>
       isPremium ? [...kieFreeImageModels, ...kiePremiumImageModels] : kieFreeImageModels;
-
   List<Map<String, String>> get videoModels =>
       isPremium ? [...kieFreeVideoModels, ...kiePremiumVideoModels] : kieFreeVideoModels;
+  List<Map<String, String>> get musicModels =>
+      isPremium ? [...kieFreeMusicModels, ...kiePremiumMusicModels] : kieFreeMusicModels;
 
   @override
   void initState() {
@@ -56,11 +71,7 @@ class _AIStudioPageState extends State<AIStudioPage> {
     try {
       final user = Supabase.instance.client.auth.currentUser;
       if (user == null) return;
-      final row = await Supabase.instance.client
-          .from('profiles')
-          .select('ai_plan')
-          .eq('id', user.id)
-          .maybeSingle();
+      final row = await Supabase.instance.client.from('profiles').select('ai_plan').eq('id', user.id).maybeSingle();
       final next = (row?['ai_plan'] ?? 'free').toString();
       if (!mounted) return;
       setState(() {
@@ -68,6 +79,7 @@ class _AIStudioPageState extends State<AIStudioPage> {
         loadingPlan = false;
         selectedImageModel = 'z-image';
         selectedVideoModel = 'wan/2-2-a14b-text-to-video-turbo';
+        selectedMusicModel = 'V6_MINI';
       });
     } catch (_) {
       if (mounted) setState(() => loadingPlan = false);
@@ -81,44 +93,34 @@ class _AIStudioPageState extends State<AIStudioPage> {
     return 'Free';
   }
 
-  Widget _modelPicker({required bool image}) {
-    final models = image ? imageModels : videoModels;
-    final selected = image ? selectedImageModel : selectedVideoModel;
+  Widget _modelPicker({required String type}) {
+    final models = type == 'image' ? imageModels : type == 'video' ? videoModels : musicModels;
+    final selected = type == 'image' ? selectedImageModel : type == 'video' ? selectedVideoModel : selectedMusicModel;
+    final freeId = type == 'image' ? 'z-image' : type == 'video' ? 'wan/2-2-a14b-text-to-video-turbo' : 'V6_MINI';
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: DropdownButtonFormField<String>(
         value: models.any((m) => m['id'] == selected) ? selected : models.first['id'],
         decoration: InputDecoration(
-          labelText: isPremium
-              ? 'KIE ${image ? 'Image' : 'Video'} Model • $planLabel'
-              : 'KIE Free / Trial ${image ? 'Image' : 'Video'} Model',
+          labelText: isPremium ? 'KIE ${type[0].toUpperCase()}${type.substring(1)} Model • $planLabel' : 'KIE Free / Trial ${type[0].toUpperCase()}${type.substring(1)} Model',
           prefixIcon: Icon(isPremium ? Icons.workspace_premium : Icons.lock_open),
           border: const OutlineInputBorder(),
         ),
         items: models.map((m) {
-          final premium = m['id'] != (image ? 'z-image' : 'wan/2-2-a14b-text-to-video-turbo');
+          final premium = m['id'] != freeId;
           return DropdownMenuItem<String>(
             value: m['id'],
-            child: Row(
-              children: [
-                Expanded(child: Text(m['name']!)),
-                if (premium) const Icon(Icons.workspace_premium, size: 17),
-              ],
-            ),
+            child: Row(children: [Expanded(child: Text(m['name']!)), if (premium) const Icon(Icons.workspace_premium, size: 17)]),
           );
         }).toList(),
-        onChanged: loadingPlan
-            ? null
-            : (v) {
-                if (v == null) return;
-                setState(() {
-                  if (image) {
-                    selectedImageModel = v;
-                  } else {
-                    selectedVideoModel = v;
-                  }
-                });
-              },
+        onChanged: loadingPlan ? null : (v) {
+          if (v == null) return;
+          setState(() {
+            if (type == 'image') selectedImageModel = v;
+            if (type == 'video') selectedVideoModel = v;
+            if (type == 'music') selectedMusicModel = v;
+          });
+        },
       ),
     );
   }
@@ -131,46 +133,33 @@ class _AIStudioPageState extends State<AIStudioPage> {
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 12),
-            child: Center(
-              child: Chip(
-                avatar: Icon(
-                  isPremium ? Icons.workspace_premium : Icons.auto_awesome,
-                  size: 17,
-                ),
-                label: Text(planLabel),
-              ),
-            ),
+            child: Center(child: Chip(avatar: Icon(isPremium ? Icons.workspace_premium : Icons.auto_awesome, size: 17), label: Text(planLabel))),
           ),
         ],
       ),
       body: Column(
         children: [
           const SizedBox(height: 12),
-          if (mode == 'image') _modelPicker(image: true),
-          if (mode == 'video') _modelPicker(image: false),
-          if (!isPremium && (mode == 'image' || mode == 'video'))
+          if (mode == 'image') _modelPicker(type: 'image'),
+          if (mode == 'video') _modelPicker(type: 'video'),
+          if (mode == 'music') _modelPicker(type: 'music'),
+          if (!isPremium && (mode == 'image' || mode == 'video' || mode == 'music'))
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
               child: Card(
                 child: ListTile(
                   leading: const Icon(Icons.workspace_premium),
                   title: const Text('Unlock stronger KIE models'),
-                  subtitle: const Text('Premium plans can select the advanced image and video models.'),
+                  subtitle: const Text('Premium plans can select advanced image, video and music models.'),
                   trailing: const Icon(Icons.chevron_right),
-                  onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Upgrade to a Premium plan to unlock stronger KIE models.')),
-                  ),
+                  onTap: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Upgrade to a Premium plan to unlock stronger KIE models.'))),
                 ),
               ),
             ),
           Expanded(
             child: Center(
               child: Text(
-                mode == 'image'
-                    ? 'Image: $selectedImageModel'
-                    : mode == 'video'
-                        ? 'Video: $selectedVideoModel'
-                        : 'AI Studio • $planLabel',
+                mode == 'image' ? 'Image: $selectedImageModel' : mode == 'video' ? 'Video: $selectedVideoModel' : mode == 'music' ? 'Music: $selectedMusicModel' : 'AI Studio • $planLabel',
               ),
             ),
           ),
@@ -178,9 +167,7 @@ class _AIStudioPageState extends State<AIStudioPage> {
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: ['chat', 'image', 'video', 'music'].indexOf(mode),
-        onDestinationSelected: (i) => setState(() {
-          mode = ['chat', 'image', 'video', 'music'][i];
-        }),
+        onDestinationSelected: (i) => setState(() => mode = ['chat', 'image', 'video', 'music'][i]),
         destinations: const [
           NavigationDestination(icon: Icon(Icons.chat_bubble_outline), label: 'Chat'),
           NavigationDestination(icon: Icon(Icons.image_outlined), label: 'Image'),
