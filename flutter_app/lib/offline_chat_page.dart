@@ -229,12 +229,11 @@ class _OfflineChatPageState extends State<OfflineChatPage> {
     if (read) {
       return const Icon(Icons.done_all_rounded, size: 15, color: Color(0xffffc107));
     }
-    // Requested GG status behavior:
-    // offline recipient = double grey checks, online recipient = single grey check.
+    // GG status: offline = one check, online/delivered = double checks.
     if (peerOnline) {
-      return const Icon(Icons.done_rounded, size: 15, color: Colors.white70);
+      return const Icon(Icons.done_all_rounded, size: 15, color: Colors.white70);
     }
-    return const Icon(Icons.done_all_rounded, size: 15, color: Colors.white70);
+    return const Icon(Icons.done_rounded, size: 15, color: Colors.white70);
   }
 
   Widget bubble(Map<String, dynamic> message) {
