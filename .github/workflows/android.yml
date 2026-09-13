@@ -23,12 +23,20 @@ jobs:
           rm -f test/widget_test.dart
           rm -rf android/app/src/main/res/mipmap-*
 
-      - name: Configure VEYLORA premium launcher icon and auth deep link
+      - name: Configure VEYLORA premium launcher icon, internet access and auth deep link
         run: |
           python3 - <<'PY'
           from pathlib import Path
           p = Path('android/app/src/main/AndroidManifest.xml')
           s = p.read_text()
+
+          # Release builds need INTERNET permission in the main manifest.
+          permission = '    <uses-permission android:name="android.permission.INTERNET" />\n'
+          if 'android.permission.INTERNET' not in s:
+              s = s.replace('<manifest ', '<manifest ', 1)
+              insert_at = s.find('>') + 1
+              s = s[:insert_at] + '\n' + permission + s[insert_at:]
+
           s = s.replace('android:icon="@mipmap/ic_launcher"', 'android:icon="@drawable/veylora_icon"')
           s = s.replace('android:roundIcon="@mipmap/ic_launcher_round"', 'android:roundIcon="@drawable/veylora_icon"')
           marker = '''        <meta-data android:name="flutter_deeplinking_enabled" android:value="false" />\n        <intent-filter>\n                    <action android:name="android.intent.action.VIEW" />\n                    <category android:name="android.intent.category.DEFAULT" />\n                    <category android:name="android.intent.category.BROWSABLE" />\n                    <data android:scheme="veylora" android:host="auth-callback" />\n                </intent-filter>\n'''
@@ -37,8 +45,10 @@ jobs:
           p.write_text(s)
           PY
 
-      - name: Verify premium icon is present
-        run: test -f android/app/src/main/res/drawable/veylora_icon.xml
+      - name: Verify Android network permission and premium icon
+        run: |
+          grep -q 'android.permission.INTERNET' android/app/src/main/AndroidManifest.xml
+          test -f android/app/src/main/res/drawable/veylora_icon.xml
 
       - name: Install dependencies
         run: flutter pub get
