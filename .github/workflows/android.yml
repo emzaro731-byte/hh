@@ -23,6 +23,9 @@ jobs:
       - name: Generate Android project files
         run: flutter create --platforms=android --project-name=veylola_ai .
 
+      - name: Remove Flutter template test
+        run: rm -f test/widget_test.dart
+
       - name: Install the Veylola premium icon
         run: |
           set -e
@@ -49,7 +52,7 @@ jobs:
         run: |
           test -n "$SUPABASE_URL" || { echo "SUPABASE_URL secret is missing"; exit 1; }
           test -n "$SUPABASE_ANON_KEY" || { echo "SUPABASE_ANON_KEY secret is missing"; exit 1; }
-          echo "Supabase configuration detected."
+          echo "Supabase URL and publishable/anon key are available to the build."
 
       - name: Analyze
         run: flutter analyze
