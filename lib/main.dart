@@ -5,48 +5,53 @@ import 'screens/auth_screen.dart';
 import 'screens/studio_screen.dart';
 
 const supabaseUrl = String.fromEnvironment('SUPABASE_URL', defaultValue: '');
-const supabaseAnonKey = String.fromEnvironment('SUPABASE_ANON_KEY', defaultValue: '');
+const supabasePublishableKey = String.fromEnvironment('SUPABASE_ANON_KEY', defaultValue: '');
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  if (supabaseUrl.isEmpty || supabaseAnonKey.isEmpty) {
-    throw Exception('Missing SUPABASE_URL or SUPABASE_ANON_KEY. Pass them with --dart-define.');
+  if (supabaseUrl.isEmpty || supabasePublishableKey.isEmpty) {
+    throw Exception('Missing SUPABASE_URL or SUPABASE_ANON_KEY.');
   }
   final prefs = await SharedPreferences.getInstance();
-  await Supabase.initialize(url: supabaseUrl, anonKey: supabaseAnonKey);
+  await Supabase.initialize(url: supabaseUrl, publishableKey: supabasePublishableKey);
   runApp(VeylolaApp(prefs: prefs));
 }
 
 class VeylolaApp extends StatelessWidget {
   final SharedPreferences prefs;
   const VeylolaApp({super.key, required this.prefs});
+
   @override
-  Widget build(BuildContext context) => MaterialApp(
-    debugShowCheckedModeBanner: false,
-    title: 'VEYLOLA',
-    theme: ThemeData(
-      brightness: Brightness.dark,
-      scaffoldBackgroundColor: const Color(0xFF070A12),
-      colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF7C5CFF), brightness: Brightness.dark),
-      useMaterial3: true,
-    ),
-    home: AuthGate(prefs: prefs),
-  );
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      title: 'VEYLOLA',
+      theme: ThemeData(
+        brightness: Brightness.dark,
+        scaffoldBackgroundColor: const Color(0xFF070A12),
+        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF7C5CFF), brightness: Brightness.dark),
+        useMaterial3: true,
+      ),
+      home: AuthGate(prefs: prefs),
+    );
+  }
 }
 
-class AuthGate extends StatefulWidget {
+class AuthGate extends StatelessWidget {
   final SharedPreferences prefs;
   const AuthGate({super.key, required this.prefs});
-  @override State<AuthGate> createState() => _AuthGateState();
-}
-class _AuthGateState extends State<AuthGate> {
-  late final Stream<AuthState> _authStream;
-  @override void initState() { super.initState(); _authStream = Supabase.instance.client.auth.onAuthStateChange; }
-  @override Widget build(BuildContext context) => StreamBuilder<AuthState>(
-    stream: _authStream,
-    builder: (_, snapshot) {
-      if (snapshot.data?.event == AuthChangeEvent.passwordRecovery) return const UpdatePasswordScreen();
-      return Supabase.instance.client.auth.currentSession == null ? const AuthScreen() : StudioScreen(prefs: widget.prefs);
-    },
-  );
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<AuthState>(
+      stream: Supabase.instance.client.auth.onAuthStateChange,
+      builder: (context, snapshot) {
+        if (snapshot.data?.event == AuthChangeEvent.passwordRecovery) {
+          return const UpdatePasswordScreen();
+        }
+        final session = Supabase.instance.client.auth.currentSession;
+        return session == null ? const AuthScreen() : StudioScreen(prefs: prefs);
+      },
+    );
+  }
 }
