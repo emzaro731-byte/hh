@@ -1,4 +1,4 @@
-name: VEYLORA AI Android APK
+name: VEYLOLA Android APK
 
 on:
   push:
@@ -21,7 +21,23 @@ jobs:
           flutter-version: '3.24.5'
 
       - name: Generate Android project files
-        run: flutter create --platforms=android --project-name=veylora_ai .
+        run: flutter create --platforms=android --project-name=veylola_ai .
+
+      - name: Install the Veylola premium icon
+        run: |
+          set -e
+          mkdir -p android/app/src/main/res/drawable-nodpi
+          cp assets/veylola_icon.png android/app/src/main/res/drawable-nodpi/veylola_icon.png
+          python3 - <<'PY'
+          from pathlib import Path
+          manifest = Path('android/app/src/main/AndroidManifest.xml')
+          text = manifest.read_text()
+          text = text.replace('android:icon="@mipmap/ic_launcher"', 'android:icon="@drawable/veylola_icon"')
+          text = text.replace('android:label="@string/app_name"', 'android:label="VEYLOLA"')
+          manifest.write_text(text)
+          PY
+          test -f android/app/src/main/res/drawable-nodpi/veylola_icon.png
+          echo "Using the checked-in Veylola icon. No icon generator is used."
 
       - name: Install dependencies
         run: flutter pub get
@@ -50,6 +66,6 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: veylora-ai-apk
+          name: veylola-apk
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
