@@ -3,7 +3,7 @@ import 'package:http/http.dart' as http;
 
 class AiService {
   static const supabaseUrl = String.fromEnvironment('SUPABASE_URL', defaultValue: 'https://vihbsfrwnslnmheowkhy.supabase.co');
-  static const anonKey = String.fromEnvironment('SUPABASE_ANON_KEY', defaultValue: 'sb_publishable_j8gV4-PeFte1RMgl759uQQ_KrM_3vzK');
+  static const anonKey = String.fromEnvironment('SUPABASE_ANON_KEY', defaultValue: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZpaGJzZnJ3bnNsbm1oZW93a2h5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgwMDMyMzksImV4cCI6MjEwMzU3OTIzOX0.eHAaAj7d7bhpFuBFinwxa80fW-QrjOpNwShSzSadhdA');
   const AiService();
 
   Map<String, String> get _headers => {
