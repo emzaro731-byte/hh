@@ -38,19 +38,50 @@ class AiService {
     required List<Map<String, String>> messages,
     String model = 'groq/compound',
   }) async {
-    final data = await _post('chat', {'messages': messages, 'model': model});
+    final data = await _post('chat', {
+      'messages': messages,
+      'model': model,
+      'webSearch': true,
+    });
     return (data['choices']?[0]?['message']?['content'] ?? '').toString();
+  }
+
+  Future<String> webResearch(String query) async {
+    final data = await chat(messages: [
+      {
+        'role': 'user',
+        'content': '''Search the live web before answering. Research the following request for an AI image/video generation task:
+
+$query
+
+Use current web information where useful. Return a concise, factual creative brief with important names, visual details, locations, dates, and source URLs/citations when available. Do not invent facts. The result will be passed to an image or video generator.''',
+      },
+    ]);
+    return data;
   }
 
   Future<String> generateImage(
     String prompt, {
     String size = '1:1',
     bool enhance = true,
+    bool webSearch = false,
   }) async {
+    var finalPrompt = prompt;
+    if (webSearch) {
+      finalPrompt = '''Create the requested image using this original prompt and current web research.
+
+ORIGINAL PROMPT:
+$prompt
+
+WEB RESEARCH:
+${await webResearch(prompt)}
+
+Use the research only to improve factual/current visual details. Do not copy copyrighted images or text.''';
+    }
     final data = await _post(
       'generate-image',
-      {'prompt': prompt, 'size': size, 'nVariants': 1, 'isEnhance': enhance},
-      timeout: const Duration(seconds: 60),
+      {'prompt': finalPrompt, 'size': size, 'nVariants': 1, 'isEnhance': enhance},
+      timeout: const Duration(seconds: 120),
     );
     return (data['data']?['taskId'] ?? data['taskId'] ?? '').toString();
   }
@@ -91,17 +122,30 @@ class AiService {
     int duration = 5,
     String resolution = '1080p',
     String? imageUrl,
+    bool webSearch = false,
   }) async {
+    var finalPrompt = prompt;
+    if (webSearch) {
+      finalPrompt = '''Create the requested video using this original prompt and current web research.
+
+ORIGINAL PROMPT:
+$prompt
+
+WEB RESEARCH:
+${await webResearch(prompt)}
+
+Use the research only to improve factual/current visual details. Do not copy copyrighted footage.''';
+    }
     final data = await _post(
       'generate-video',
       {
-        'prompt': prompt,
+        'prompt': finalPrompt,
         'ratio': ratio,
         'duration': duration,
         'resolution': resolution,
         if (imageUrl != null && imageUrl.isNotEmpty) 'imageUrl': imageUrl,
       },
-      timeout: const Duration(seconds: 60),
+      timeout: const Duration(seconds: 120),
     );
     return (data['data']?['task_id'] ??
             data['data']?['taskId'] ??
