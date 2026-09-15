@@ -18,6 +18,7 @@ class _StudioScreenState extends State<StudioScreen> {
   final messages = <Map<String, String>>[];
   String? result;
   bool busy = false;
+  bool webSearch = true;
 
   final tabs = const [
     (Icons.chat_bubble_outline, 'Chat'),
@@ -50,11 +51,19 @@ class _StudioScreenState extends State<StudioScreen> {
         messages.add({'role': 'assistant', 'content': answer});
         result = answer;
       } else if (tab == 1) {
-        result = 'Image job: ${await service.generateImage(text)}';
+        if (webSearch) {
+          result = 'Searching the web and creating image...';
+          if (mounted) setState(() {});
+        }
+        result = 'Image job: ${await service.generateImage(text, webSearch: webSearch)}';
       } else if (tab == 2) {
         result = 'Music job: ${await service.generateMusic(text)}';
       } else {
-        result = 'Video job: ${await service.generateVideo(text)}';
+        if (webSearch) {
+          result = 'Searching the web and creating video...';
+          if (mounted) setState(() {});
+        }
+        result = 'Video job: ${await service.generateVideo(text, webSearch: webSearch)}';
       }
       prompt.clear();
     } catch (e) {
@@ -69,6 +78,7 @@ class _StudioScreenState extends State<StudioScreen> {
   @override
   Widget build(BuildContext context) {
     final selectedTitle = tabs[tab].$2;
+    final canSearch = tab == 0 || tab == 1 || tab == 3;
 
     return Scaffold(
       appBar: AppBar(
@@ -151,7 +161,7 @@ class _StudioScreenState extends State<StudioScreen> {
                           const SizedBox(height: 8),
                           Text(
                             tab == 0
-                                ? 'Ask VEYLOLA anything.'
+                                ? 'Ask VEYLOLA anything and use live web information.'
                                 : 'Describe what you want to create.',
                             style: const TextStyle(color: Colors.white60),
                           ),
@@ -172,6 +182,28 @@ class _StudioScreenState extends State<StudioScreen> {
                               ),
                             ),
                           ),
+                          if (canSearch) ...[
+                            const SizedBox(height: 10),
+                            Container(
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(.04),
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                              child: SwitchListTile(
+                                dense: true,
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+                                value: webSearch,
+                                onChanged: (value) => setState(() => webSearch = value),
+                                secondary: const Icon(Icons.language),
+                                title: const Text('Live web research'),
+                                subtitle: Text(
+                                  tab == 0
+                                      ? 'Use current web information for answers'
+                                      : 'Research current facts before creating',
+                                ),
+                              ),
+                            ),
+                          ],
                           const SizedBox(height: 14),
                           SizedBox(
                             height: 52,
@@ -218,6 +250,7 @@ class _StudioScreenState extends State<StudioScreen> {
                       runSpacing: 10,
                       children: [
                         _Feature(icon: Icons.chat_bubble, text: 'Smart chat'),
+                        _Feature(icon: Icons.language, text: 'Web search'),
                         _Feature(icon: Icons.image, text: 'Images'),
                         _Feature(icon: Icons.music_note, text: 'Music'),
                         _Feature(icon: Icons.movie, text: 'Videos'),
