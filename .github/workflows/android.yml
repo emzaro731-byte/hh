@@ -1,4 +1,5 @@
-name: VEYLORA AI Android
+name: VEYLORA AI Android APK
+
 on:
   push:
     branches: [main]
@@ -8,25 +9,30 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
         with:
           channel: stable
           flutter-version: '3.24.5'
+
       - name: Generate Android project files
         run: flutter create --platforms=android --project-name=veylora_ai .
+
       - name: Install dependencies
         run: flutter pub get
+
       - name: Analyze
         run: flutter analyze
-      - name: Build APK
+
+      - name: Build release APK
         run: flutter build apk --release --dart-define=SUPABASE_URL=${{ secrets.SUPABASE_URL }} --dart-define=SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }}
-      - name: Build AAB
-        run: flutter build appbundle --release --dart-define=SUPABASE_URL=${{ secrets.SUPABASE_URL }} --dart-define=SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }}
-      - name: Upload Android artifacts
+
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: veylora-ai-android
-          path: |
-            build/app/outputs/flutter-apk/app-release.apk
-            build/app/outputs/bundle/release/app-release.aab
+          name: veylora-ai-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
