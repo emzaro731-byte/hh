@@ -4,13 +4,33 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'screens/auth_screen.dart';
 import 'screens/studio_screen.dart';
 
-const supabaseUrl = 'https://vihbsfrwnslnmheowkhy.supabase.co';
-const supabasePublishableKey = 'sb_publishable_j8gV4-PeFte1RMgl759uQQ_KrM_3vzK';
+const supabaseUrl = String.fromEnvironment(
+  'SUPABASE_URL',
+  defaultValue: '',
+);
+
+const supabaseAnonKey = String.fromEnvironment(
+  'SUPABASE_ANON_KEY',
+  defaultValue: '',
+);
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  if (supabaseUrl.isEmpty || supabaseAnonKey.isEmpty) {
+    throw Exception(
+      'Missing SUPABASE_URL or SUPABASE_ANON_KEY. '
+      'Pass them with --dart-define.',
+    );
+  }
+
   final prefs = await SharedPreferences.getInstance();
-  await Supabase.initialize(url: supabaseUrl, publishableKey: supabasePublishableKey);
+
+  await Supabase.initialize(
+    url: supabaseUrl,
+    anonKey: supabaseAnonKey,
+  );
+
   runApp(VeyloraApp(prefs: prefs));
 }
 
@@ -24,7 +44,10 @@ class VeyloraApp extends StatelessWidget {
     theme: ThemeData(
       brightness: Brightness.dark,
       scaffoldBackgroundColor: const Color(0xFF070A12),
-      colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF7C5CFF), brightness: Brightness.dark),
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: const Color(0xFF7C5CFF),
+        brightness: Brightness.dark,
+      ),
       useMaterial3: true,
     ),
     home: AuthGate(prefs: prefs),
@@ -34,15 +57,26 @@ class VeyloraApp extends StatelessWidget {
 class AuthGate extends StatefulWidget {
   final SharedPreferences prefs;
   const AuthGate({super.key, required this.prefs});
-  @override State<AuthGate> createState() => _AuthGateState();
+  @override
+  State<AuthGate> createState() => _AuthGateState();
 }
+
 class _AuthGateState extends State<AuthGate> {
   late final Stream<AuthState> _authStream;
-  @override void initState() { super.initState(); _authStream = Supabase.instance.client.auth.onAuthStateChange; }
-  @override Widget build(BuildContext context) => StreamBuilder<AuthState>(
+
+  @override
+  void initState() {
+    super.initState();
+    _authStream = Supabase.instance.client.auth.onAuthStateChange;
+  }
+
+  @override
+  Widget build(BuildContext context) => StreamBuilder<AuthState>(
     stream: _authStream,
     builder: (_, snapshot) {
-      if (snapshot.data?.event == AuthChangeEvent.passwordRecovery) return const UpdatePasswordScreen();
+      if (snapshot.data?.event == AuthChangeEvent.passwordRecovery) {
+        return const UpdatePasswordScreen();
+      }
       return Supabase.instance.client.auth.currentSession == null
           ? const AuthScreen()
           : StudioScreen(prefs: widget.prefs);
