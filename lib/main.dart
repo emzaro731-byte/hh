@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'screens/auth_screen.dart';
-import 'screens/studio_screen.dart';
+import 'screens/trading_dashboard_screen.dart';
 
 const supabaseUrl = String.fromEnvironment('SUPABASE_URL', defaultValue: '');
 const supabasePublishableKey = String.fromEnvironment('SUPABASE_ANON_KEY', defaultValue: '');
@@ -50,7 +50,7 @@ class AuthGate extends StatelessWidget {
           return const UpdatePasswordScreen();
         }
         final session = Supabase.instance.client.auth.currentSession;
-        return session == null ? const AuthScreen() : StudioScreen(prefs: prefs);
+        return session == null ? const AuthScreen() : const TradingDashboardScreen();
       },
     );
   }
